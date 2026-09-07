@@ -174,7 +174,11 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
         donation_consent: consentEmergency,
         emergency_contact_consent: consentHospitalShare,
         is_available: feelingWell && !recentIllness,
-        last_donation_date: lastDonationDate || null
+        last_donation_date: lastDonationDate || null,
+        donation_count: 0,
+        medical_verification_status: "PENDING",
+        availability_status: feelingWell && !recentIllness ? "AVAILABLE" : "UNAVAILABLE",
+        donation_cycle_completed: !lastDonationDate || new Date() >= new Date(lastDonationDate),
       });
 
       setIsSubmitting(false);

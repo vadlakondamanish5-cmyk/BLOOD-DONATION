@@ -1,14 +1,9 @@
 const pool = require("../db/pool");
 const { calculateDistance } = require("../utils/geo");
 const { getCompatibleDonors, getCompatibilityScore } = require("../utils/bloodCompatibility");
+const { getEligibilitySummary } = require("../utils/donorEligibility");
 
-/**
- * Run the HexaVision Matching Engine for a blood request
- * @param {number} requestId
- * @returns {Promise<Array>} List of matched donors with scores and rank
- */
 async function matchDonorsForRequest(requestId) {
-    // 1. Fetch request details
     const requestRes = await pool.query(
         `SELECT r.*, h.hospital_name, h.phone as hospital_phone, h.latitude as hosp_lat, h.longitude as hosp_lon
          FROM blood_requests r
@@ -30,27 +25,28 @@ async function matchDonorsForRequest(requestId) {
         return [];
     }
 
-    // 2. Fetch candidate donors who have given donation consent
-    // We check compatible blood groups
     const query = `
         SELECT id, full_name, phone, email, blood_group, latitude, longitude,
-               donation_consent, emergency_contact_consent, is_available, last_donation_date
+               donation_consent, emergency_contact_consent, is_available,
+               last_donation_date, next_eligibility_date,
+               donation_cycle_completed, medical_verification_status, availability_status
         FROM donors
         WHERE blood_group = ANY($1::varchar[])
           AND donation_consent = TRUE
     `;
 
     const donorsRes = await pool.query(query, [compatibleGroups]);
-    const donors = donorsRes.rows;
+    const eligibleDonors = donorsRes.rows.filter((donor) => {
+        const eligibility = getEligibilitySummary(donor, request.blood_group);
+        return eligibility.eligible;
+    });
 
-    if (donors.length === 0) {
+    if (eligibleDonors.length === 0) {
         return [];
     }
 
-    // 3. Compute multi-factor scores for each donor
     const now = new Date();
-    const scoredMatches = donors.map((donor) => {
-        // Distance
+    const scoredMatches = eligibleDonors.map((donor) => {
         const distanceKm = calculateDistance(reqLat, reqLon, donor.latitude, donor.longitude) || 15.0;
         let distanceScore = 100;
         if (distanceKm <= 3) {
@@ -67,22 +63,18 @@ async function matchDonorsForRequest(requestId) {
             distanceScore = Math.max(10, Math.round(100 - distanceKm));
         }
 
-        // Compatibility
         const compatScore = getCompatibilityScore(request.blood_group, donor.blood_group);
-
-        // Availability (safety check: 90 days between donations)
         let availScore = donor.is_available ? 100 : 20;
         if (donor.last_donation_date) {
             const lastDate = new Date(donor.last_donation_date);
             const daysSince = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
             if (daysSince < 60) {
-                availScore = Math.min(availScore, 20); // Not safe yet
+                availScore = Math.min(availScore, 20);
             } else if (daysSince < 90) {
-                availScore = Math.min(availScore, 65); // Approaching window
+                availScore = Math.min(availScore, 65);
             }
         }
 
-        // Response score based on consent and emergency willingness
         let respScore = 85;
         if (donor.emergency_contact_consent) {
             respScore = 96;
@@ -91,8 +83,6 @@ async function matchDonorsForRequest(requestId) {
             respScore = 100;
         }
 
-        // Weighted total calculation:
-        // Distance: 35%, Compatibility: 30%, Availability: 20%, Response: 15%
         const totalScore = Math.round(
             (distanceScore * 0.35 + compatScore * 0.30 + availScore * 0.20 + respScore * 0.15) * 100
         ) / 100;
@@ -108,19 +98,16 @@ async function matchDonorsForRequest(requestId) {
             availability_score: availScore,
             total_score: totalScore,
             is_available: donor.is_available,
-            emergency_contact_consent: donor.emergency_contact_consent
+            emergency_contact_consent: donor.emergency_contact_consent,
+            eligibility_status: getEligibilitySummary(donor, request.blood_group)
         };
     });
 
-    // 4. Sort by total_score descending
     scoredMatches.sort((a, b) => b.total_score - a.total_score);
 
-    // 5. Assign rank positions and store into database
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
-
-        // Clear previous pending matches for this request to recompute fresh rankings
         await client.query(
             `DELETE FROM donor_matches 
              WHERE request_id = $1 AND status IN ('PENDING', 'NOTIFIED')`,
@@ -155,11 +142,11 @@ async function matchDonorsForRequest(requestId) {
                 ...insertRes.rows[0],
                 donor_name: match.donor_name,
                 phone: match.phone,
-                blood_group: match.blood_group
+                blood_group: match.blood_group,
+                eligibility_status: match.eligibility_status
             });
         }
 
-        // Update request status to MATCHING if it was OPEN
         await client.query(
             `UPDATE blood_requests 
              SET status = 'MATCHING' 

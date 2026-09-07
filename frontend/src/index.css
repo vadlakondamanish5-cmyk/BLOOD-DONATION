@@ -2053,6 +2053,265 @@ a:focus-visible {
   gap: 14px;
 }
 
+.donor-carousel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 18px 16px;
+  margin-top: 16px;
+}
+
+.donor-carousel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.donor-carousel-header h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.donor-carousel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.donor-carousel-button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-main);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.donor-carousel-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 42, 85, 0.35);
+  box-shadow: 0 0 16px rgba(255, 42, 85, 0.12);
+}
+
+.donor-carousel-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.donor-carousel-button:focus-visible,
+.donor-carousel-scroll:focus-visible {
+  outline: 2px solid var(--blood-red);
+  outline-offset: 2px;
+}
+
+.donor-carousel-shell {
+  --left-fade: 0;
+  --right-fade: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.donor-carousel-shell::before,
+.donor-carousel-shell::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.donor-carousel-shell::before {
+  left: 0;
+  background: linear-gradient(90deg, rgba(6, 9, 17, 0.95), rgba(6, 9, 17, 0));
+  opacity: var(--left-fade);
+}
+
+.donor-carousel-shell::after {
+  right: 0;
+  background: linear-gradient(270deg, rgba(6, 9, 17, 0.95), rgba(6, 9, 17, 0));
+  opacity: var(--right-fade);
+}
+
+.donor-carousel-scroll {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 8px 14px;
+  scroll-behavior: smooth;
+  white-space: nowrap;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 42, 85, 0.4) transparent;
+  cursor: grab;
+  user-select: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-y;
+}
+
+.donor-carousel-scroll.dragging {
+  cursor: grabbing;
+  scroll-behavior: auto;
+  user-select: none;
+}
+
+.donor-carousel-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.donor-carousel-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 42, 85, 0.38);
+  border-radius: 999px;
+}
+
+.donor-card {
+  flex: 0 0 clamp(230px, 22vw, 270px);
+  min-width: clamp(230px, 22vw, 270px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(18, 24, 38, 0.92), rgba(11, 17, 27, 0.8));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-glass);
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.donor-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(255, 42, 85, 0.26);
+  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.28);
+}
+
+.donor-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.donor-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 42, 85, 0.1);
+  color: var(--blood-red);
+  border: 1px solid rgba(255, 42, 85, 0.2);
+}
+
+.donor-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.donor-status-available {
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.12);
+  color: #7ae5b7;
+}
+
+.donor-status-limited {
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.12);
+  color: #f7d38b;
+}
+
+.donor-status-unavailable {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
+}
+
+.donor-blood-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.match-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0, 242, 254, 0.08);
+  border: 1px solid rgba(0, 242, 254, 0.2);
+  color: #7fe9ff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.donor-card h4 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--text-main);
+}
+
+.donor-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.donor-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  margin-top: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.donor-score-row strong {
+  color: var(--text-main);
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+}
+
+.donor-empty-state {
+  min-width: 220px;
+  padding: 20px 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+}
+
 .metric-module {
   position: relative;
   display: flex;

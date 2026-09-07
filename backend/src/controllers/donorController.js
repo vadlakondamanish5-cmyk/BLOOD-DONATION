@@ -1,6 +1,41 @@
 const pool = require("../db/pool");
+const { buildNextEligibilityDate, getEligibilitySummary, normalizeStatus } = require("../utils/donorEligibility");
 
-// Get all donors with filtering
+const attachEligibility = (donor, requestBloodGroup = null) => {
+    if (!donor) return donor;
+    const eligibilitySummary = getEligibilitySummary(donor, requestBloodGroup);
+    return {
+        ...donor,
+        ...eligibilitySummary,
+        next_eligibility_date: donor.next_eligibility_date || buildNextEligibilityDate(donor.last_donation_date),
+        donation_cycle_completed: eligibilitySummary.isDonationCycleCompleted,
+        medical_verification_status: donor.medical_verification_status || "PENDING",
+        availability_status: donor.availability_status || (donor.is_available ? "AVAILABLE" : "UNAVAILABLE")
+    };
+};
+
+const normalizeDonorValues = (body = {}, currentDonor = null) => {
+    const lastDonationDate = body.last_donation_date !== undefined ? body.last_donation_date : (currentDonor?.last_donation_date || null);
+    const donationCount = Number(body.donation_count ?? currentDonor?.donation_count ?? 0);
+    const nextEligibilityDate = body.next_eligibility_date !== undefined
+        ? body.next_eligibility_date
+        : (lastDonationDate ? buildNextEligibilityDate(lastDonationDate) : (currentDonor?.next_eligibility_date || null));
+    const cycleCompleted = body.donation_cycle_completed !== undefined
+        ? Boolean(body.donation_cycle_completed)
+        : (lastDonationDate ? (nextEligibilityDate ? new Date() >= new Date(nextEligibilityDate) : true) : true);
+    const medicalVerificationStatus = normalizeStatus(body.medical_verification_status ?? currentDonor?.medical_verification_status ?? "PENDING");
+    const availabilityStatus = normalizeStatus(body.availability_status ?? currentDonor?.availability_status ?? ((body.is_available ?? currentDonor?.is_available ?? true) ? "AVAILABLE" : "UNAVAILABLE"));
+
+    return {
+        lastDonationDate,
+        donationCount,
+        nextEligibilityDate,
+        cycleCompleted,
+        medicalVerificationStatus,
+        availabilityStatus
+    };
+};
+
 exports.getAllDonors = async (req, res) => {
     try {
         const { blood_group, is_available, search } = req.query;
@@ -30,14 +65,17 @@ exports.getAllDonors = async (req, res) => {
         query += " ORDER BY d.created_at DESC";
 
         const result = await pool.query(query, params);
-        res.json({ success: true, count: result.rows.length, data: result.rows });
+        res.json({
+            success: true,
+            count: result.rows.length,
+            data: result.rows.map((donor) => attachEligibility(donor))
+        });
     } catch (err) {
         console.error("Error fetching donors:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 };
 
-// Get single donor by ID
 exports.getDonorById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -46,7 +84,7 @@ exports.getDonorById = async (req, res) => {
             return res.status(404).json({ success: false, message: "Donor not found" });
         }
 
-        // Fetch matches history
+        const donor = donorRes.rows[0];
         const matchesRes = await pool.query(
             `SELECT m.*, r.blood_group as req_blood_group, r.urgency, h.hospital_name
              FROM donor_matches m
@@ -58,7 +96,6 @@ exports.getDonorById = async (req, res) => {
             [id]
         );
 
-        // Fetch consent logs
         const consentRes = await pool.query(
             `SELECT * FROM consent_logs WHERE donor_id = $1 ORDER BY consent_time DESC LIMIT 10`,
             [id]
@@ -67,7 +104,7 @@ exports.getDonorById = async (req, res) => {
         res.json({
             success: true,
             data: {
-                ...donorRes.rows[0],
+                ...attachEligibility(donor),
                 matches: matchesRes.rows,
                 consent_logs: consentRes.rows
             }
@@ -78,7 +115,101 @@ exports.getDonorById = async (req, res) => {
     }
 };
 
-// Register new donor
+exports.getDonorEligibility = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { request_blood_group } = req.query;
+        const donorRes = await pool.query("SELECT * FROM donors WHERE id = $1", [id]);
+        if (donorRes.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "Donor not found" });
+        }
+
+        const donor = donorRes.rows[0];
+        const summary = getEligibilitySummary(donor, request_blood_group || null);
+
+        return res.json({ success: true, data: { ...donor, ...summary } });
+    } catch (err) {
+        console.error("Error fetching donor eligibility:", err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.getDonorDonationSummary = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const donorRes = await pool.query("SELECT * FROM donors WHERE id = $1", [id]);
+        if (donorRes.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "Donor not found" });
+        }
+
+        const donor = donorRes.rows[0];
+        return res.json({
+            success: true,
+            data: {
+                donor_id: donor.id,
+                last_donation_date: donor.last_donation_date,
+                next_eligibility_date: donor.next_eligibility_date || buildNextEligibilityDate(donor.last_donation_date),
+                donation_count: Number(donor.donation_count || 0),
+                donation_cycle_completed: donor.donation_cycle_completed || (donor.last_donation_date ? new Date() >= new Date(donor.next_eligibility_date || buildNextEligibilityDate(donor.last_donation_date)) : true),
+                donation_status: donordonorStatus(donor)
+            }
+        });
+    } catch (err) {
+        console.error("Error fetching donor donation summary:", err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+const donordonorStatus = (donor) => {
+    const cycleCompleted = donor.last_donation_date ? new Date() >= new Date(donor.next_eligibility_date || buildNextEligibilityDate(donor.last_donation_date)) : true;
+    if (!donor.last_donation_date) return "FIRST_TIME_ELIGIBLE";
+    if (!cycleCompleted) return "NOT_COMPLETED";
+    if (donor.medical_verification_status && normalizeStatus(donor.medical_verification_status) !== "VERIFIED") return "PRELIMINARY_ELIGIBILITY_COMPLETED";
+    return "ELIGIBLE_AVAILABLE";
+};
+
+exports.recordDonation = async (req, res) => {
+    const { id } = req.params;
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+        const donorRes = await client.query("SELECT * FROM donors WHERE id = $1", [id]);
+        if (donorRes.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ success: false, message: "Donor not found" });
+        }
+
+        const currentDonor = donorRes.rows[0];
+        const donationDate = req.body.donation_date || new Date().toISOString().slice(0, 10);
+        const nextEligibilityDate = req.body.next_eligibility_date || buildNextEligibilityDate(donationDate);
+        const updatedCount = Number(currentDonor.donation_count || 0) + 1;
+        const updated = await client.query(
+            `UPDATE donors
+             SET last_donation_date = $1,
+                 donation_count = $2,
+                 next_eligibility_date = $3,
+                 donation_cycle_completed = FALSE,
+                 is_available = FALSE,
+                 availability_status = 'ON_COOLDOWN',
+                 medical_verification_status = COALESCE($4, medical_verification_status),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $5
+             RETURNING *`,
+            [donationDate, updatedCount, nextEligibilityDate, normalizeStatus(req.body.medical_verification_status || currentDonor.medical_verification_status || "PENDING"), id]
+        );
+
+        await client.query("COMMIT");
+        return res.json({ success: true, data: attachEligibility(updated.rows[0]) });
+    } catch (err) {
+        await client.query("ROLLBACK");
+        console.error("Error recording donor donation:", err);
+        return res.status(500).json({ success: false, error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
 exports.createDonor = async (req, res) => {
     const client = await pool.connect();
     try {
@@ -92,7 +223,12 @@ exports.createDonor = async (req, res) => {
             donation_consent = false,
             emergency_contact_consent = false,
             is_available = true,
-            last_donation_date = null
+            last_donation_date = null,
+            donation_count = 0,
+            next_eligibility_date = null,
+            donation_cycle_completed,
+            medical_verification_status,
+            availability_status
         } = req.body;
 
         if (!full_name || !phone || !blood_group) {
@@ -102,13 +238,17 @@ exports.createDonor = async (req, res) => {
             });
         }
 
+        const donorFields = normalizeDonorValues(req.body);
+
         await client.query("BEGIN");
 
         const insertDonorQuery = `
             INSERT INTO donors (
                 full_name, phone, email, blood_group, latitude, longitude,
-                donation_consent, emergency_contact_consent, is_available, last_donation_date
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                donation_consent, emergency_contact_consent, is_available, last_donation_date,
+                donation_count, next_eligibility_date, donation_cycle_completed,
+                medical_verification_status, availability_status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING *
         `;
 
@@ -122,12 +262,16 @@ exports.createDonor = async (req, res) => {
             Boolean(donation_consent),
             Boolean(emergency_contact_consent),
             Boolean(is_available),
-            last_donation_date || null
+            donorFields.lastDonationDate,
+            Number(donation_count || donorFields.donationCount || 0),
+            donorFields.nextEligibilityDate,
+            donorFields.cycleCompleted,
+            donorFields.medicalVerificationStatus,
+            donorFields.availabilityStatus
         ]);
 
         const donor = donorRes.rows[0];
 
-        // Record initial consent in consent_logs
         await client.query(
             `INSERT INTO consent_logs (donor_id, consent_type, consent_given)
              VALUES ($1, 'GENERAL_DONATION', $2),
@@ -136,11 +280,11 @@ exports.createDonor = async (req, res) => {
         );
 
         await client.query("COMMIT");
-        res.status(201).json({ success: true, data: donor });
+        res.status(201).json({ success: true, data: attachEligibility(donor) });
     } catch (err) {
         await client.query("ROLLBACK");
         console.error("Error creating donor:", err);
-        if (err.code === "23505") { // Unique constraint on phone
+        if (err.code === "23505") {
             return res.status(409).json({ success: false, message: "Phone number already registered" });
         }
         res.status(500).json({ success: false, error: err.message });
@@ -149,7 +293,6 @@ exports.createDonor = async (req, res) => {
     }
 };
 
-// Update donor details & consent
 exports.updateDonor = async (req, res) => {
     const client = await pool.connect();
     try {
@@ -164,18 +307,23 @@ exports.updateDonor = async (req, res) => {
             donation_consent,
             emergency_contact_consent,
             is_available,
-            last_donation_date
+            last_donation_date,
+            donation_count,
+            next_eligibility_date,
+            donation_cycle_completed,
+            medical_verification_status,
+            availability_status
         } = req.body;
 
         await client.query("BEGIN");
 
-        // Fetch current
         const currentRes = await client.query("SELECT * FROM donors WHERE id = $1", [id]);
         if (currentRes.rows.length === 0) {
             await client.query("ROLLBACK");
             return res.status(404).json({ success: false, message: "Donor not found" });
         }
         const current = currentRes.rows[0];
+        const computed = normalizeDonorValues(req.body, current);
 
         const updateQuery = `
             UPDATE donors SET
@@ -189,8 +337,13 @@ exports.updateDonor = async (req, res) => {
                 emergency_contact_consent = COALESCE($8, emergency_contact_consent),
                 is_available = COALESCE($9, is_available),
                 last_donation_date = COALESCE($10, last_donation_date),
+                donation_count = COALESCE($11, donation_count),
+                next_eligibility_date = COALESCE($12, next_eligibility_date),
+                donation_cycle_completed = COALESCE($13, donation_cycle_completed),
+                medical_verification_status = COALESCE($14, medical_verification_status),
+                availability_status = COALESCE($15, availability_status),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $11
+            WHERE id = $16
             RETURNING *
         `;
 
@@ -205,10 +358,14 @@ exports.updateDonor = async (req, res) => {
             emergency_contact_consent !== undefined ? Boolean(emergency_contact_consent) : null,
             is_available !== undefined ? Boolean(is_available) : null,
             last_donation_date !== undefined ? last_donation_date : null,
+            donation_count !== undefined ? Number(donation_count) : null,
+            next_eligibility_date !== undefined ? next_eligibility_date : null,
+            donation_cycle_completed !== undefined ? Boolean(donation_cycle_completed) : null,
+            medical_verification_status !== undefined ? normalizeStatus(medical_verification_status) : current.medical_verification_status || null,
+            availability_status !== undefined ? normalizeStatus(availability_status) : current.availability_status || null,
             id
         ]);
 
-        // If consent was toggled, record audit entry
         if (donation_consent !== undefined && donation_consent !== current.donation_consent) {
             await client.query(
                 `INSERT INTO consent_logs (donor_id, consent_type, consent_given)
@@ -226,7 +383,7 @@ exports.updateDonor = async (req, res) => {
         }
 
         await client.query("COMMIT");
-        res.json({ success: true, data: result.rows[0] });
+        res.json({ success: true, data: attachEligibility(result.rows[0]) });
     } catch (err) {
         await client.query("ROLLBACK");
         console.error("Error updating donor:", err);
@@ -236,7 +393,6 @@ exports.updateDonor = async (req, res) => {
     }
 };
 
-// Delete donor
 exports.deleteDonor = async (req, res) => {
     try {
         const { id } = req.params;

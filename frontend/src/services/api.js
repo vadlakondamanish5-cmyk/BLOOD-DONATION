@@ -44,6 +44,13 @@ export const api = {
         return request(`/donors${query ? `?${query}` : ""}`);
     },
     getDonorById: (id) => request(`/donors/${id}`),
+    getDonorEligibility: (id, requestBloodGroup = null) => {
+        const params = requestBloodGroup ? { request_blood_group: requestBloodGroup } : {};
+        const query = new URLSearchParams(params).toString();
+        return request(`/donors/${id}/eligibility${query ? `?${query}` : ""}`);
+    },
+    getDonorDonationSummary: (id) => request(`/donors/${id}/donations`),
+    recordDonation: (id, data = {}) => request(`/donors/${id}/donations`, { method: "POST", body: JSON.stringify(data) }),
     createDonor: (data) => request("/donors", { method: "POST", body: JSON.stringify(data) }),
     updateDonor: (id, data) => request(`/donors/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     deleteDonor: (id) => request(`/donors/${id}`, { method: "DELETE" }),

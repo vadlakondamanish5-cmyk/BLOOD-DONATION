@@ -42,6 +42,10 @@ export const api = {
   // Donors
   getDonors: (params = {}) => axiosInstance.get("/donors", { params }),
   getDonorById: (id) => axiosInstance.get(`/donors/${id}`),
+  getDonorEligibility: (id, requestBloodGroup = null) =>
+    axiosInstance.get(`/donors/${id}/eligibility`, { params: requestBloodGroup ? { request_blood_group: requestBloodGroup } : {} }),
+  getDonorDonationSummary: (id) => axiosInstance.get(`/donors/${id}/donations`),
+  recordDonation: (id, data = {}) => axiosInstance.post(`/donors/${id}/donations`, data),
   createDonor: (data) => axiosInstance.post("/donors", data),
   updateDonor: (id, data) => axiosInstance.patch(`/donors/${id}`, data),
   deleteDonor: (id) => axiosInstance.delete(`/donors/${id}`),

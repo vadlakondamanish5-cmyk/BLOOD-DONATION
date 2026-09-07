@@ -160,6 +160,86 @@ async function seed() {
         const usedEmails = new Set();
         const usedPhones = new Set();
 
+        const now = new Date();
+        const addDaysToDate = (days) => {
+            const date = new Date(now);
+            date.setDate(date.getDate() + days);
+            return date.toISOString().slice(0, 10);
+        };
+
+        const featuredDonors = [
+            {
+                full_name: "Rahul Kumar",
+                phone: "+91 9876543210",
+                email: "rahul.kumar@hexavision.demo",
+                blood_group: "O-",
+                latitude: 12.9716,
+                longitude: 77.5946,
+                donation_consent: true,
+                emergency_contact_consent: true,
+                is_available: true,
+                last_donation_date: "2026-06-10",
+                donation_count: 3,
+                next_eligibility_date: "2026-09-08",
+                donation_cycle_completed: true,
+                medical_verification_status: "VERIFIED",
+                availability_status: "AVAILABLE"
+            },
+            {
+                full_name: "Arjun Reddy",
+                phone: "+91 9765432109",
+                email: "arjun.reddy@hexavision.demo",
+                blood_group: "O-",
+                latitude: 12.9416,
+                longitude: 77.6046,
+                donation_consent: true,
+                emergency_contact_consent: true,
+                is_available: true,
+                last_donation_date: "2026-09-01",
+                donation_count: 2,
+                next_eligibility_date: "2026-11-01",
+                donation_cycle_completed: false,
+                medical_verification_status: "VERIFIED",
+                availability_status: "AVAILABLE"
+            },
+            {
+                full_name: "Priya Nair",
+                phone: "+91 9654321098",
+                email: "priya.nair@hexavision.demo",
+                blood_group: "B+",
+                latitude: 12.9316,
+                longitude: 77.6226,
+                donation_consent: true,
+                emergency_contact_consent: false,
+                is_available: false,
+                last_donation_date: "2026-08-10",
+                donation_count: 2,
+                next_eligibility_date: "2026-10-10",
+                donation_cycle_completed: false,
+                medical_verification_status: "PENDING",
+                availability_status: "UNAVAILABLE"
+            },
+            {
+                full_name: "Karan Singh",
+                phone: "+91 9543210987",
+                email: "karan.singh@hexavision.demo",
+                blood_group: "A+",
+                latitude: 12.9146,
+                longitude: 77.6186,
+                donation_consent: true,
+                emergency_contact_consent: true,
+                is_available: true,
+                last_donation_date: "2026-06-12",
+                donation_count: 4,
+                next_eligibility_date: "2026-08-11",
+                donation_cycle_completed: true,
+                medical_verification_status: "PENDING",
+                availability_status: "AVAILABLE"
+            }
+        ];
+
+        featuredDonors.forEach((donor) => syntheticDonors.push({ ...donor, synthetic_health: { condition: "None", medication: "No routine medication", surgery: "No prior surgery", eligibility: "Scenario for demo" } }));
+
         for (const [bloodGroup, targetCount] of Object.entries(targetDistribution)) {
             for (let i = 0; i < targetCount; i += 1) {
                 const firstName = firstNames[randomInt(0, firstNames.length - 1)];
@@ -199,12 +279,17 @@ async function seed() {
                     ? null
                     : new Date(Date.now() - lastDonationDaysAgo * 24 * 60 * 60 * 1000);
 
+                const donationCycleCompleted = lastDonationDaysAgo >= 90;
+                const verificationStatus = Math.random() < 0.72 ? "VERIFIED" : (Math.random() < 0.5 ? "PENDING" : "REQUIRED");
+                const availabilityStatus = isAvailable ? "AVAILABLE" : (Math.random() < 0.5 ? "ON_COOLDOWN" : "TEMPORARILY_INELIGIBLE");
                 const syntheticHealthProfile = {
                     condition: ["None", "Controlled hypertension", "Mild anemia", "Asthma", "Thyroid management"][randomInt(0, 4)],
                     medication: Math.random() < 0.32 ? "Routine medication in use" : "No routine medication",
                     surgery: Math.random() < 0.28 ? "Previous procedure in the past 2 years" : "No prior surgery",
-                    eligibility: isAvailable ? "Eligible for donation screening" : "Temporary ineligibility due to recent donation or recovery window"
+                    eligibility: donationCycleCompleted && verificationStatus === "VERIFIED" && isAvailable ? "Eligible for donation screening" : "Temporary ineligibility due to recent donation or recovery window"
                 };
+
+                const nextEligibilityDate = lastDonationDate ? new Date(lastDonationDate.getTime() + (90 * 24 * 60 * 60 * 1000)) : null;
 
                 let phone = `+91 ${padPhone(randomInt(7000000000, 9999999999))}`;
                 while (usedPhones.has(phone)) {
@@ -229,6 +314,11 @@ async function seed() {
                     emergency_contact_consent: emergencyConsent,
                     is_available: isAvailable,
                     last_donation_date: lastDonationDate ? toDateString(lastDonationDate) : null,
+                    donation_count: Math.max(1, Math.floor(20 - lastDonationDaysAgo / 30 + Math.random() * 3)),
+                    next_eligibility_date: nextEligibilityDate ? toDateString(nextEligibilityDate) : null,
+                    donation_cycle_completed: donationCycleCompleted,
+                    medical_verification_status: verificationStatus,
+                    availability_status: availabilityStatus,
                     synthetic_health: syntheticHealthProfile
                 });
             }
@@ -246,7 +336,7 @@ async function seed() {
 
             chunk.forEach((donor, donorIndex) => {
                 const rowIndex = donorIndex * 10;
-                placeholders.push(`($${rowIndex + 1}, $${rowIndex + 2}, $${rowIndex + 3}, $${rowIndex + 4}, $${rowIndex + 5}, $${rowIndex + 6}, $${rowIndex + 7}, $${rowIndex + 8}, $${rowIndex + 9}, $${rowIndex + 10})`);
+                placeholders.push(`($${rowIndex + 1}, $${rowIndex + 2}, $${rowIndex + 3}, $${rowIndex + 4}, $${rowIndex + 5}, $${rowIndex + 6}, $${rowIndex + 7}, $${rowIndex + 8}, $${rowIndex + 9}, $${rowIndex + 10}, $${rowIndex + 11}, $${rowIndex + 12}, $${rowIndex + 13}, $${rowIndex + 14}, $${rowIndex + 15})`);
                 values.push(
                     donor.full_name,
                     donor.phone,
@@ -257,7 +347,12 @@ async function seed() {
                     donor.donation_consent,
                     donor.emergency_contact_consent,
                     donor.is_available,
-                    donor.last_donation_date
+                    donor.last_donation_date,
+                    donor.donation_count,
+                    donor.next_eligibility_date,
+                    donor.donation_cycle_completed,
+                    donor.medical_verification_status,
+                    donor.availability_status
                 );
             });
 

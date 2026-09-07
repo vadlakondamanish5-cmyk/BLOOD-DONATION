@@ -21,6 +21,7 @@ export default function DonorNetwork() {
   const [bloodGroup, setBloodGroup] = useState("ALL");
   const [availableOnly, setAvailableOnly] = useState(false);
   const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState("eligible");
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
 
   // New Donor Form state
@@ -56,6 +57,18 @@ export default function DonorNetwork() {
   useEffect(() => {
     loadDonors();
   }, [bloodGroup, availableOnly, search]);
+
+  const donorCounts = {
+    eligible: donors.filter((donor) => donor.eligible || donor.eligibility_status === "ELIGIBLE").length,
+    notEligible: donors.filter((donor) => !donor.eligible && donor.eligibility_status !== "ELIGIBLE").length
+  };
+
+  const visibleDonors = donors.filter((donor) => {
+    const donorState = donor.eligible || donor.eligibility_status === "ELIGIBLE" ? "eligible" : "not_eligible";
+    const matchesCategory = activeFilter === "eligible" ? donorState === "eligible" : donorState === "not_eligible";
+    const matchesSearch = !search || donor.full_name?.toLowerCase().includes(search.toLowerCase()) || donor.phone?.includes(search);
+    return matchesCategory && matchesSearch;
+  });
 
   const handleToggleAvailability = async (donor) => {
     try {
@@ -131,7 +144,6 @@ export default function DonorNetwork() {
       {/* Filter Bar */}
       <div className="glass-card" style={{ padding: "16px 20px", marginBottom: "24px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-          {/* Search */}
           <div style={{ position: "relative", flex: "1", minWidth: "220px" }}>
             <Search size={16} style={{ position: "absolute", left: "12px", top: "12px", color: "var(--text-muted)" }} />
             <input
@@ -144,7 +156,39 @@ export default function DonorNetwork() {
             />
           </div>
 
-          {/* Blood group pills */}
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {[
+              { key: "eligible", label: "Eligible", tone: "green" },
+              { key: "not_eligible", label: "Not Eligible", tone: "red" }
+            ].map((option) => {
+              const isActive = activeFilter === option.key;
+              const count = option.key === "eligible" ? donorCounts.eligible : donorCounts.notEligible;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setActiveFilter(option.key)}
+                  style={{
+                    border: isActive ? "1px solid transparent" : "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: "12px",
+                    padding: "10px 16px",
+                    minWidth: "170px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    background: isActive
+                      ? option.tone === "green"
+                        ? "linear-gradient(135deg, rgba(34,197,94,0.2), rgba(22,163,74,0.12))"
+                        : "linear-gradient(135deg, rgba(239,68,68,0.2), rgba(220,38,38,0.12))"
+                      : "rgba(15, 23, 42, 0.7)",
+                    color: option.tone === "green" ? "#bbf7d0" : "#fecaca",
+                  }}
+                >
+                  {option.tone === "green" ? "🟢" : "🔴"} {option.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+
           <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px" }}>
             {["ALL", "O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"].map((bg) => (
               <button
@@ -158,7 +202,6 @@ export default function DonorNetwork() {
             ))}
           </div>
 
-          {/* Availability checkbox */}
           <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
             <input
               type="checkbox"
@@ -192,7 +235,7 @@ export default function DonorNetwork() {
               </tr>
             </thead>
             <tbody>
-              {donors.map((d) => (
+              {visibleDonors.map((d) => (
                 <tr key={d.id}>
                   <td>
                     <span className="blood-pill blood-pill-sm">{d.blood_group}</span>

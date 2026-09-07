@@ -1,11 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
   Bell,
+  CalendarClock,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   DatabaseZap,
+  Droplet,
   Hospital,
+  MapPin,
   Radio,
   Search,
   ShieldCheck,
@@ -42,6 +47,46 @@ const formatClock = (value) => {
   } catch {
     return value;
   }
+};
+
+const getDonorStatus = (donor) => {
+  if (!donor) return { label: "UNAVAILABLE", tone: "unavailable" };
+  if (donor.is_available && donor.donation_consent && donor.emergency_contact_consent) {
+    return { label: "AVAILABLE", tone: "available" };
+  }
+  if (donor.is_available) {
+    return { label: "LIMITED", tone: "limited" };
+  }
+  return { label: "UNAVAILABLE", tone: "unavailable" };
+};
+
+const getDistanceText = (donor) => {
+  if (!donor) return "—";
+
+  if (donor.distance_km !== undefined && donor.distance_km !== null && donor.distance_km !== "") {
+    const value = Number(donor.distance_km);
+    return Number.isFinite(value) ? `${value.toFixed(1)} km` : donor.distance_km;
+  }
+
+  if (donor.distance !== undefined && donor.distance !== null && donor.distance !== "") {
+    const value = Number(donor.distance);
+    return Number.isFinite(value) ? `${value.toFixed(1)} km` : donor.distance;
+  }
+
+  if (donor.distance_text) return donor.distance_text;
+  return "—";
+};
+
+const getMatchScore = (donor) => {
+  if (!donor) return null;
+
+  const value = donor.match_score ?? donor.matching_score ?? donor.compatibility_score ?? donor.score;
+  if (value === undefined || value === null || value === "") return null;
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+
+  return `${Math.round(numeric)}%`;
 };
 
 export default function DashboardPage({
@@ -277,8 +322,17 @@ export default function DashboardPage({
     matchingNow: requestList.filter((r) => r.status === "MATCHING").length || toNumber(requestsBase.active_requests),
     notifiedCount: matchList.filter((m) => ["NOTIFIED", "DELIVERED"].includes(m.status)).length || toNumber(alertsBase.total_alerts_dispatched),
     activeRequests: requestList.filter((r) => ["OPEN", "MATCHING"].includes(r.status)).length || toNumber(requestsBase.active_requests),
-    matchedCount: matchList.filter((m) => ["ACCEPTED", "NOTIFIED", "DELIVERED"].includes(m.status)).length || toNumber(matchesBase.total_matches)
+    matchedCount: matchList.filter((m) => ["ACCEPTED", "NOTIFIED", "DELIVERED"].includes(m.status)).length || toNumber(matchesBase.total_matches),
+    eligibleDonors: Number(stats?.donors?.eligible_donors ?? donorList.filter((d) => d.eligible).length),
+    waitingDonors: Number(stats?.donors?.waiting_for_donation_cycle ?? donorList.filter((d) => !d.isDonationCycleCompleted).length),
+    ineligibleDonors: Number(stats?.donors?.medically_ineligible ?? donorList.filter((d) => !d.eligible || !d.isMedicallyVerified || d.isTemporarilyIneligible).length)
   };
+
+  const donorEligibilityCards = [
+    { label: "🟢 Eligible & Available Donors", value: dashboardStats.eligibleDonors, tone: "green" },
+    { label: "⚠️ Donors Waiting for Donation Cycle", value: dashboardStats.waitingDonors, tone: "amber" },
+    { label: "🔴 Medically/Temporarily Ineligible", value: dashboardStats.ineligibleDonors, tone: "red" }
+  ];
 
   const emergencyBlocks = [
     {
@@ -440,6 +494,93 @@ export default function DashboardPage({
 
   const metricDefinition = activeMetric ? getMetricDefinition(activeMetric) : null;
 
+  const donorCarouselRef = useRef(null);
+  const donorDragRef = useRef({ dragging: false, startX: 0, startScrollLeft: 0 });
+  const [donorScrollState, setDonorScrollState] = useState({ canScrollLeft: false, canScrollRight: true });
+
+  const updateDonorScrollState = () => {
+    const carousel = donorCarouselRef.current;
+    if (!carousel) return;
+
+    const atStart = carousel.scrollLeft <= 4;
+    const atEnd = carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth - 4;
+    setDonorScrollState({
+      canScrollLeft: !atStart,
+      canScrollRight: !atEnd
+    });
+  };
+
+  useEffect(() => {
+    updateDonorScrollState();
+  }, [donorList]);
+
+  useEffect(() => {
+    const carousel = donorCarouselRef.current;
+    if (!carousel) return undefined;
+
+    const handleScroll = () => updateDonorScrollState();
+    const handleResize = () => updateDonorScrollState();
+
+    carousel.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleResize);
+    handleScroll();
+
+    return () => {
+      carousel.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  const scrollDonorCarousel = (direction) => {
+    const carousel = donorCarouselRef.current;
+    if (!carousel) return;
+
+    const scrollAmount = Math.min(carousel.clientWidth * 0.8, 340);
+    carousel.scrollBy({ left: direction * scrollAmount, behavior: "smooth" });
+  };
+
+  const handleDonorDragStart = (event) => {
+    const carousel = donorCarouselRef.current;
+    if (!carousel) return;
+
+    donorDragRef.current = {
+      dragging: true,
+      startX: event.clientX,
+      startScrollLeft: carousel.scrollLeft
+    };
+
+    carousel.setPointerCapture?.(event.pointerId);
+    carousel.classList.add("dragging");
+  };
+
+  const handleDonorDragMove = (event) => {
+    const carousel = donorCarouselRef.current;
+    if (!carousel || !donorDragRef.current.dragging) return;
+
+    const deltaX = event.clientX - donorDragRef.current.startX;
+    carousel.scrollLeft = donorDragRef.current.startScrollLeft - deltaX;
+  };
+
+  const handleDonorDragEnd = () => {
+    donorDragRef.current.dragging = false;
+    const carousel = donorCarouselRef.current;
+    if (carousel) {
+      carousel.classList.remove("dragging");
+    }
+  };
+
+  const handleDonorKeyDown = (event) => {
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      scrollDonorCarousel(1);
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      scrollDonorCarousel(-1);
+    }
+  };
+
   return (
     <div className="command-dashboard-shell">
       <div className="command-dashboard">
@@ -488,6 +629,131 @@ export default function DashboardPage({
               );
             })}
           </div>
+
+          <div className="telemetry-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+            {donorEligibilityCards.map((card) => (
+              <div
+                key={card.label}
+                className={`metric-module metric-module-${card.tone}`}
+                style={{ minHeight: "110px" }}
+              >
+                <div className="metric-header">
+                  <span className="metric-name">{card.label}</span>
+                </div>
+                <div className="metric-body">
+                  <strong>{loading ? "..." : card.value}</strong>
+                  <small>Eligibility summary</small>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <section className="donor-carousel-section glass-card" aria-label="Available donor carousel">
+            <div className="donor-carousel-header">
+              <div>
+                <span className="eyebrow">DONOR NETWORK</span>
+                <h3>Available donors</h3>
+              </div>
+
+              <div className="donor-carousel-actions">
+                <button
+                  type="button"
+                  className="donor-carousel-button"
+                  onClick={() => scrollDonorCarousel(-1)}
+                  disabled={!donorScrollState.canScrollLeft}
+                  aria-label="Scroll donors left"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="donor-carousel-button"
+                  onClick={() => scrollDonorCarousel(1)}
+                  disabled={!donorScrollState.canScrollRight}
+                  aria-label="Scroll donors right"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div
+              className="donor-carousel-shell"
+              style={{
+                "--left-fade": donorScrollState.canScrollLeft ? 1 : 0,
+                "--right-fade": donorScrollState.canScrollRight ? 1 : 0
+              }}
+            >
+              <div className="donor-carousel-scroll" 
+                ref={donorCarouselRef}
+                tabIndex={0}
+                onKeyDown={handleDonorKeyDown}
+                onPointerDown={handleDonorDragStart}
+                onPointerMove={handleDonorDragMove}
+                onPointerUp={handleDonorDragEnd}
+                onPointerLeave={handleDonorDragEnd}
+                onPointerCancel={handleDonorDragEnd}
+                onWheel={(event) => {
+                  if (event.shiftKey) {
+                    event.preventDefault();
+                    donorCarouselRef.current?.scrollBy({ left: event.deltaY, behavior: "auto" });
+                  }
+                }}
+                style={{ touchAction: "pan-y" }}
+              >
+                {donorList.length === 0 ? (
+                  <div className="donor-empty-state">No donor records available.</div>
+                ) : (
+                  donorList.map((donor) => {
+                    const donorStatus = getDonorStatus(donor);
+                    const matchScore = getMatchScore(donor);
+
+                    return (
+                      <article key={donor.id} className={`donor-card donor-status-${donorStatus.tone}`}>
+                        <div className="donor-card-header">
+                          <div className="donor-avatar">
+                            <Droplet size={16} />
+                          </div>
+                          <span className={`donor-status-badge donor-status-${donorStatus.tone}`}>
+                            {donorStatus.label}
+                          </span>
+                        </div>
+
+                        <div className="donor-blood-row">
+                          <span className="blood-pill blood-pill-sm">{donor.blood_group || "—"}</span>
+                          {matchScore ? <span className="match-score">{matchScore}</span> : null}
+                        </div>
+
+                        <h4>{donor.full_name || "Unnamed donor"}</h4>
+
+                        <div className="donor-meta-item">
+                          <MapPin size={14} />
+                          <span>{getDistanceText(donor)}</span>
+                        </div>
+
+                        <div className="donor-meta-item">
+                          <CalendarClock size={14} />
+                          <span>{formatDate(donor.last_donation_date)}</span>
+                        </div>
+
+                        <div className="donor-meta-item">
+                          <ShieldCheck size={14} />
+                          <span>{donor.donation_consent ? "Consent verified" : "Consent pending"}</span>
+                        </div>
+
+                        {matchScore ? (
+                          <div className="donor-score-row">
+                            <span>Matching score</span>
+                            <strong>{matchScore}</strong>
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </section>
         </section>
 
         <aside className="pulse-rail">

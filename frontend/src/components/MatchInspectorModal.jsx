@@ -167,7 +167,6 @@ export default function MatchInspectorModal({ requestId, onClose, onRefreshData 
               </div>
             </div>
 
-            {/* Actions Bar */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
               <div style={{ fontSize: "0.9rem", fontWeight: "700" }}>
                 Ranked Compatible Donors ({data.matches?.length || 0})
@@ -189,6 +188,40 @@ export default function MatchInspectorModal({ requestId, onClose, onRefreshData 
                 </button>
               </div>
             </div>
+
+            {(data.eligible_donors?.length || data.ineligible_donors?.length) > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginBottom: "20px" }}>
+                <div style={{ background: "rgba(8, 14, 28, 0.7)", border: "1px solid rgba(16, 185, 129, 0.28)", borderRadius: "12px", padding: "14px" }}>
+                  <div style={{ color: "#34d399", fontWeight: "700", marginBottom: "10px" }}>🟢 Eligible & Available Donors</div>
+                  {data.eligible_donors?.length ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {data.eligible_donors.slice(0, 5).map((donor) => (
+                        <div key={donor.donor_id} style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                          <strong style={{ color: "white" }}>{donor.full_name}</strong> • {donor.blood_group} • {donor.distance_km ? `${Number(donor.distance_km).toFixed(1)} km` : "Distance pending"}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>No eligible donors available for this request.</div>
+                  )}
+                </div>
+
+                <div style={{ background: "rgba(8, 14, 28, 0.7)", border: "1px solid rgba(255, 117, 97, 0.28)", borderRadius: "12px", padding: "14px" }}>
+                  <div style={{ color: "#ffb199", fontWeight: "700", marginBottom: "10px" }}>⚠️ Donors Not Eligible For This Request</div>
+                  {data.ineligible_donors?.length ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {data.ineligible_donors.slice(0, 5).map((donor) => (
+                        <div key={donor.donor_id} style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                          <strong style={{ color: "white" }}>{donor.full_name}</strong> • {donor.reason || "Not eligible"}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>No excluded donors for this request.</div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Matches Table */}
             {data.matches?.length === 0 ? (

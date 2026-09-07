@@ -1,9 +1,9 @@
 const pool = require("../db/pool");
+const { getEligibilitySummary } = require("../utils/donorEligibility");
 
 // Get executive command center metrics
 exports.getDashboardStats = async (req, res) => {
     try {
-        // 1. Donors stats
         const donorStatsRes = await pool.query(`
             SELECT 
                 COUNT(*) AS total_donors,
@@ -12,6 +12,15 @@ exports.getDashboardStats = async (req, res) => {
                 COUNT(*) FILTER (WHERE emergency_contact_consent = TRUE) AS emergency_ready_donors
             FROM donors
         `);
+
+        const donorRowsRes = await pool.query("SELECT * FROM donors");
+        const donorEligibilitySummary = donorRowsRes.rows.reduce((summary, donor) => {
+            const eligibility = getEligibilitySummary(donor);
+            if (eligibility.eligible) summary.eligible_donors += 1;
+            if (!eligibility.isDonationCycleCompleted) summary.waiting_for_donation_cycle += 1;
+            if (!eligibility.isMedicallyVerified || eligibility.isTemporarilyIneligible) summary.medically_ineligible += 1;
+            return summary;
+        }, { eligible_donors: 0, waiting_for_donation_cycle: 0, medically_ineligible: 0 });
 
         // 2. Donors by blood group
         const bloodGroupRes = await pool.query(`
@@ -74,7 +83,10 @@ exports.getDashboardStats = async (req, res) => {
         res.json({
             success: true,
             data: {
-                donors: donorStatsRes.rows[0],
+                donors: {
+                    ...donorStatsRes.rows[0],
+                    ...donorEligibilitySummary
+                },
                 blood_inventory: bloodGroupRes.rows,
                 requests: requestStatsRes.rows[0],
                 matches: matchStatsRes.rows[0],

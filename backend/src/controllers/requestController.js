@@ -1,6 +1,9 @@
 const pool = require("../db/pool");
 const { findMatchingDonors } = require("../services/tier1Matcher");
 const { broadcastToMatchedDonors } = require("../services/notificationService");
+const { calculateDistance } = require("../utils/geo");
+const { getCompatibleDonors } = require("../utils/bloodCompatibility");
+const { getEligibilitySummary } = require("../utils/donorEligibility");
 
 const VALID_BLOOD_GROUPS = ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"];
 const VALID_URGENCIES = ["NORMAL", "URGENT", "CRITICAL"];
@@ -280,7 +283,6 @@ exports.getRequestById = async (req, res) => {
 
         const request = requestRows[0];
 
-        // Fetch ranked matches with sanitized donor details (no phone or email)
         const matchesQuery = `
             SELECT m.id AS match_id,
                    m.rank_position,
@@ -300,6 +302,38 @@ exports.getRequestById = async (req, res) => {
             ORDER BY m.rank_position ASC, m.total_score DESC
         `;
         const { rows: rankedMatches } = await pool.query(matchesQuery, [requestId]);
+
+        const compatibleGroups = getCompatibleDonors(request.blood_group);
+        const donorCandidatesRes = compatibleGroups.length
+            ? await pool.query(
+                `SELECT * FROM donors
+                 WHERE blood_group = ANY($1::varchar[])
+                   AND donation_consent = TRUE`,
+                [compatibleGroups]
+            )
+            : { rows: [] };
+
+        const donorCards = donorCandidatesRes.rows.map((donor) => {
+            const summary = getEligibilitySummary(donor, request.blood_group);
+            const distanceKm = donor.latitude && donor.longitude && request.latitude && request.longitude
+                ? calculateDistance(request.latitude, request.longitude, donor.latitude, donor.longitude)
+                : null;
+            return {
+                donor_id: donor.id,
+                full_name: donor.full_name,
+                blood_group: donor.blood_group,
+                distance_km: distanceKm,
+                availability: donor.is_available,
+                medical_verification_status: donor.medical_verification_status || "PENDING",
+                availability_status: donor.availability_status || (donor.is_available ? "AVAILABLE" : "UNAVAILABLE"),
+                next_eligibility_date: donor.next_eligibility_date || null,
+                last_donation_date: donor.last_donation_date,
+                ...summary
+            };
+        });
+
+        const eligibleDonors = donorCards.filter((donor) => donor.eligible);
+        const ineligibleDonors = donorCards.filter((donor) => !donor.eligible);
 
         return res.json({
             success: true,
@@ -327,6 +361,8 @@ exports.getRequestById = async (req, res) => {
                 current_status: request.status,
                 units_required: request.units_required,
                 matched_donor_count: rankedMatches.length,
+                eligible_donors: eligibleDonors,
+                ineligible_donors: ineligibleDonors,
                 ranked_matches: rankedMatches.map((m) => ({
                     match_id: m.match_id,
                     rank_position: m.rank_position,

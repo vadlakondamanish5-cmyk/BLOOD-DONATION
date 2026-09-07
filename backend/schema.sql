@@ -19,6 +19,11 @@ CREATE TABLE donors (
     -- Availability
     is_available BOOLEAN NOT NULL DEFAULT TRUE,
     last_donation_date DATE,
+    donation_count INTEGER NOT NULL DEFAULT 0,
+    next_eligibility_date DATE,
+    donation_cycle_completed BOOLEAN NOT NULL DEFAULT FALSE,
+    medical_verification_status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    availability_status VARCHAR(30) NOT NULL DEFAULT 'AVAILABLE',
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
