@@ -155,6 +155,8 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
     setCurrentStep((prev) => Math.max(1, prev - 1));
   };
 
+  const [registeredDonorStatus, setRegisteredDonorStatus] = useState(null);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateStep(5)) return;
@@ -162,23 +164,60 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
     setServerError("");
     setIsSubmitting(true);
 
+    const normalizedConditions = selectedConditions.filter((condition) => condition !== "None of the above");
+    const medicalConditions = normalizedConditions.flatMap((condition) => {
+      if (condition === "Other") {
+        if (!otherConditionText.trim()) {
+          return ["Other"];
+        }
+        return [`Other: ${otherConditionText.trim()}`];
+      }
+      return [condition];
+    });
+
+    let donationCycleCompleted = true;
+    let nextEligibilityDate = null;
+    let daysRemaining = 0;
+    if (lastDonationDate) {
+      const lastDate = new Date(lastDonationDate);
+      const nextDate = new Date(lastDate.getTime() + 90 * 24 * 60 * 60 * 1000);
+      nextEligibilityDate = nextDate.toISOString().slice(0, 10);
+      donationCycleCompleted = new Date() >= nextDate;
+      if (!donationCycleCompleted) {
+        daysRemaining = Math.max(1, Math.ceil((nextDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)));
+      }
+    }
+
+    const isAvailable = donationCycleCompleted && feelingWell && !recentIllness;
+    const availabilityStatus = donationCycleCompleted ? (isAvailable ? "AVAILABLE" : "UNAVAILABLE") : "ON_COOLDOWN";
+
     try {
       // POST to backend /api/donors
-      await api.createDonor({
+      const res = await api.createDonor({
         full_name: fullName,
         phone: phone,
         email: email || null,
         blood_group: bloodGroup,
+        medical_conditions: medicalConditions,
+        medicalConditions: medicalConditions,
         latitude: parseFloat(latitude) || 12.9716,
         longitude: parseFloat(longitude) || 77.5946,
         donation_consent: consentEmergency,
         emergency_contact_consent: consentHospitalShare,
-        is_available: feelingWell && !recentIllness,
+        is_available: isAvailable,
         last_donation_date: lastDonationDate || null,
-        donation_count: 0,
-        medical_verification_status: "PENDING",
-        availability_status: feelingWell && !recentIllness ? "AVAILABLE" : "UNAVAILABLE",
-        donation_cycle_completed: !lastDonationDate || new Date() >= new Date(lastDonationDate),
+        donation_count: Number(totalDonations || 0),
+        next_eligibility_date: nextEligibilityDate,
+        medical_verification_status: "VERIFIED",
+        availability_status: availabilityStatus,
+        donation_cycle_completed: donationCycleCompleted,
+      });
+
+      setRegisteredDonorStatus({
+        isEligible: donationCycleCompleted,
+        daysRemaining,
+        nextEligibilityDate,
+        lastDonationDate
       });
 
       setIsSubmitting(false);
@@ -244,19 +283,71 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
       {/* SUCCESS CARD */}
       {submitSuccess ? (
         <div className="glass-panel" style={{ textAlign: "center", padding: "40px 24px" }}>
-          <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "rgba(16, 185, 129, 0.2)", border: "2px solid var(--status-available)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", color: "var(--status-available)" }}>
+          <div style={{
+            width: "64px",
+            height: "64px",
+            borderRadius: "50%",
+            background: registeredDonorStatus?.isEligible ? "rgba(16, 185, 129, 0.2)" : "rgba(239, 68, 68, 0.2)",
+            border: registeredDonorStatus?.isEligible ? "2px solid #34d399" : "2px solid #f87171",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            margin: "0 auto 16px",
+            color: registeredDonorStatus?.isEligible ? "#34d399" : "#f87171"
+          }}>
             <CheckCircle2 size={36} />
           </div>
 
           <h2 style={{ fontSize: "1.4rem", fontWeight: "800", marginBottom: "8px" }}>
             Donor Registration Completed!
           </h2>
-          <p style={{ color: "#34d399", fontSize: "0.95rem", fontWeight: "600", marginBottom: "16px" }}>
+          <p style={{ color: "#f8fafc", fontSize: "0.95rem", fontWeight: "600", marginBottom: "16px" }}>
             Welcome to HexaVision, {fullName}!
           </p>
 
+          <div style={{
+            maxWidth: "420px",
+            margin: "0 auto 20px",
+            padding: "16px",
+            borderRadius: "12px",
+            background: registeredDonorStatus?.isEligible ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.1)",
+            border: registeredDonorStatus?.isEligible ? "1px solid rgba(34, 197, 94, 0.3)" : "1px solid rgba(239, 68, 68, 0.3)",
+            textAlign: "left",
+            fontSize: "0.85rem"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+              <span style={{ color: "var(--text-muted)" }}>Eligibility Status:</span>
+              <strong style={{ color: registeredDonorStatus?.isEligible ? "#34d399" : "#f87171" }}>
+                {registeredDonorStatus?.isEligible ? "🟢 ELIGIBLE" : "🔴 NOT ELIGIBLE (COOLDOWN)"}
+              </strong>
+            </div>
+
+            {registeredDonorStatus?.lastDonationDate && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                <span style={{ color: "var(--text-muted)" }}>Last Donation:</span>
+                <span style={{ color: "#f8fafc" }}>{formatDate(registeredDonorStatus.lastDonationDate)}</span>
+              </div>
+            )}
+
+            {registeredDonorStatus?.nextEligibilityDate && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                <span style={{ color: "var(--text-muted)" }}>Next Eligible Date:</span>
+                <span style={{ color: registeredDonorStatus?.isEligible ? "#34d399" : "#fbbf24" }}>
+                  {formatDate(registeredDonorStatus.nextEligibilityDate)}
+                </span>
+              </div>
+            )}
+
+            {!registeredDonorStatus?.isEligible && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--text-muted)" }}>Cooldown Remaining:</span>
+                <strong style={{ color: "#f87171" }}>{registeredDonorStatus?.daysRemaining} days</strong>
+              </div>
+            )}
+          </div>
+
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", maxWidth: "480px", margin: "0 auto 24px", lineHeight: "1.6" }}>
-            Your registration and explicit consent declarations have been securely recorded into the PostgreSQL database and the regulatory Consent Vault. You are now discoverable as a potential match during hospital trauma and surgery emergencies.
+            Your registration and explicit consent declarations have been securely recorded into the PostgreSQL database and the regulatory Consent Vault.
           </p>
 
           <button 

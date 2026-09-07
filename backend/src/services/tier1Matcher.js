@@ -23,10 +23,14 @@ async function findMatchingDonors(recipientBloodGroup, hospitalLatitude, hospita
         FROM donors
         WHERE blood_group = ANY($1::varchar[])
           AND donation_consent = TRUE
+          AND is_available = TRUE
     `;
 
     const { rows: donors } = await pool.query(query, [compatibleGroups]);
-    const eligibleDonors = donors.filter((donor) => getEligibilitySummary(donor, normBloodGroup).eligible);
+    const eligibleDonors = donors.filter((donor) => {
+        const eligibility = getEligibilitySummary(donor, normBloodGroup);
+        return eligibility.eligible && donor.is_available === true && donor.donation_consent === true;
+    });
 
     if (eligibleDonors.length === 0) {
         return [];

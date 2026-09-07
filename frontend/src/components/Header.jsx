@@ -5,7 +5,11 @@ import {
   Hospital,
   Menu,
   Plus,
-  Radio
+  Radio,
+  Bot,
+  LogOut,
+  User,
+  ShieldCheck
 } from "lucide-react";
 
 export default function Header({
@@ -14,7 +18,11 @@ export default function Header({
   onOpenNewRequestModal,
   onOpenHospitalBloodStock,
   onNavigateToNotifications,
-  hospitalStock = []
+  hospitalStock = [],
+  user = null,
+  onOpenAuthModal,
+  onSignOut,
+  aiActive = true
 }) {
   const totalHospitals = hospitalStock.length;
   const totalUnits = hospitalStock.reduce((sum, hospital) => {
@@ -47,6 +55,15 @@ export default function Header({
             </span>
           </div>
         </button>
+
+        {/* AI System Badge */}
+        <div className={`header-ai-badge ${aiActive ? "ai-online" : "ai-standby"}`} title="Emergency Blood AI Transfusion Engine">
+          <Bot size={15} className="header-ai-icon" />
+          <span className="header-ai-text">
+            {aiActive ? "AI MATCHING ACTIVE" : "AI STANDBY"}
+          </span>
+          <span className="ai-status-pulse" />
+        </div>
       </div>
 
       <div className="header-right">
@@ -70,11 +87,35 @@ export default function Header({
           <Bell size={18} />
         </button>
 
-        <div className="hospital-badge">
-          <Hospital size={16} color="var(--cyan-accent)" />
-          <span>Apollo Trauma Desk</span>
-        </div>
+        {user ? (
+          <div className="header-user-badge">
+            <div className="user-badge-info">
+              <span className="user-badge-name">{user.full_name}</span>
+              <span className="user-badge-org">{user.organization || "Apollo Trauma Desk"}</span>
+            </div>
+            <button
+              type="button"
+              className="user-badge-logout-btn"
+              onClick={onSignOut}
+              title="Sign Out of Session"
+              aria-label="Sign Out"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onOpenAuthModal}
+            style={{ borderColor: "rgba(0, 242, 254, 0.4)", color: "var(--cyan-accent)" }}
+          >
+            <User size={14} />
+            <span>Clinical Login</span>
+          </button>
+        )}
       </div>
     </header>
   );
 }
+

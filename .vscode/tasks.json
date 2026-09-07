@@ -1,0 +1,61 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build frontend",
+			"type": "shell",
+			"command": "npm --prefix frontend run build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Install frontend tracking dependencies",
+			"type": "shell",
+			"command": "npm --prefix frontend install socket.io-client",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Install backend tracking dependencies",
+			"type": "shell",
+			"command": "npm --prefix backend install socket.io qrcode",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify frontend build",
+			"type": "shell",
+			"command": "npm --prefix frontend run build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify backend startup",
+			"type": "shell",
+			"command": "node -e \"require('./backend/src/server.js'); setTimeout(() => process.exit(0), 1500);\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify backend startup",
+			"type": "shell",
+			"command": "node -e 'require(\"./backend/src/server.js\"); setTimeout(() => process.exit(0), 1500);'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Start backend API",
+			"type": "shell",
+			"command": "npm --prefix backend run start",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Final frontend validation",
+			"type": "shell",
+			"command": "npm --prefix frontend run build",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

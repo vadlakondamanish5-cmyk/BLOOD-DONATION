@@ -16,11 +16,15 @@ exports.getDashboardStats = async (req, res) => {
         const donorRowsRes = await pool.query("SELECT * FROM donors");
         const donorEligibilitySummary = donorRowsRes.rows.reduce((summary, donor) => {
             const eligibility = getEligibilitySummary(donor);
-            if (eligibility.eligible) summary.eligible_donors += 1;
+            if (eligibility.eligible) {
+                summary.eligible_donors += 1;
+            } else {
+                summary.not_eligible_donors += 1;
+            }
             if (!eligibility.isDonationCycleCompleted) summary.waiting_for_donation_cycle += 1;
-            if (!eligibility.isMedicallyVerified || eligibility.isTemporarilyIneligible) summary.medically_ineligible += 1;
+            if (eligibility.isTemporarilyIneligible) summary.medically_ineligible += 1;
             return summary;
-        }, { eligible_donors: 0, waiting_for_donation_cycle: 0, medically_ineligible: 0 });
+        }, { eligible_donors: 0, not_eligible_donors: 0, waiting_for_donation_cycle: 0, medically_ineligible: 0 });
 
         // 2. Donors by blood group
         const bloodGroupRes = await pool.query(`

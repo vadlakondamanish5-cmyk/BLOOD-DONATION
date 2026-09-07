@@ -9,6 +9,15 @@ const axiosInstance = axios.create({
   timeout: 10000
 });
 
+// Request interceptor for auth token
+axiosInstance.interceptors.request.use((config) => {
+  const token = typeof window !== "undefined" ? localStorage.getItem("hexavision_session_token") : null;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Response interceptor
 axiosInstance.interceptors.response.use(
   (response) => response.data,
@@ -61,7 +70,24 @@ export const api = {
 
   // Consent
   getConsentLogs: (params = {}) => axiosInstance.get("/consent/logs", { params }),
-  recordConsentLog: (data) => axiosInstance.post("/consent/log", data)
+  recordConsentLog: (data) => axiosInstance.post("/consent/log", data),
+
+  // Blood Unit Tracking
+  getBloodUnits: (params = {}) => axiosInstance.get("/blood-units", { params }),
+  getBloodUnitById: (id) => axiosInstance.get(`/blood-units/${id}`),
+  getBloodTrackingOverview: () => axiosInstance.get("/blood-units/overview"),
+  getTrackingShipments: (params = {}) => axiosInstance.get("/tracking", { params }),
+  getTrackingShipmentById: (id) => axiosInstance.get(`/tracking/${id}`),
+  createBloodUnit: (data) => axiosInstance.post("/blood-units", data),
+  updateBloodUnit: (id, data) => axiosInstance.patch(`/blood-units/${id}`, data),
+  updateBloodUnitLocation: (id, data) => axiosInstance.patch(`/blood-units/${id}/location`, data),
+  updateBloodUnitTemperature: (id, data) => axiosInstance.patch(`/blood-units/${id}/temperature`, data),
+  scanBloodUnit: (id, data = {}) => axiosInstance.post(`/blood-units/${id}/scan`, data),
+
+  // Auth & Session
+  login: (data) => axiosInstance.post("/auth/login", data),
+  register: (data) => axiosInstance.post("/auth/register", data),
+  getMe: () => axiosInstance.get("/auth/me")
 };
 
 export default axiosInstance;

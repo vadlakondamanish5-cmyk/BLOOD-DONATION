@@ -9,6 +9,7 @@ CREATE TABLE donors (
     phone VARCHAR(20) NOT NULL UNIQUE,
     email VARCHAR(150),
     blood_group VARCHAR(5) NOT NULL,
+    medical_conditions TEXT,
     latitude DECIMAL(10, 7),
     longitude DECIMAL(10, 7),
 
@@ -202,5 +203,57 @@ ON donor_matches(request_id);
 CREATE INDEX idx_matches_donor
 ON donor_matches(donor_id);
 
+CREATE TABLE IF NOT EXISTS blood_units (
+    id SERIAL PRIMARY KEY,
+    unit_id VARCHAR(50) NOT NULL UNIQUE,
+    blood_group VARCHAR(10) NOT NULL,
+    component VARCHAR(40) NOT NULL DEFAULT 'Whole Blood',
+    status VARCHAR(30) NOT NULL DEFAULT 'LAB_PREPARED'
+        CHECK (status IN ('LAB_PREPARED', 'READY_FOR_DISPATCH', 'IN_TRANSIT', 'AT_HOSPITAL', 'DELIVERED', 'ALERT')),
+    source_hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL,
+    destination_hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL,
+    donor_id INTEGER REFERENCES donors(id) ON DELETE SET NULL,
+    current_latitude DECIMAL(10, 7),
+    current_longitude DECIMAL(10, 7),
+    temperature_celsius DECIMAL(5, 2),
+    target_temperature_c VARCHAR(30) DEFAULT '1-6°C',
+    qr_code TEXT,
+    dispatched_at TIMESTAMP,
+    delivered_at TIMESTAMP,
+    last_scan_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS blood_unit_events (
+    id SERIAL PRIMARY KEY,
+    blood_unit_id INTEGER NOT NULL REFERENCES blood_units(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL,
+    event_details JSONB DEFAULT '{}'::jsonb,
+    latitude DECIMAL(10, 7),
+    longitude DECIMAL(10, 7),
+    temperature_celsius DECIMAL(5, 2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS blood_unit_alerts (
+    id SERIAL PRIMARY KEY,
+    blood_unit_id INTEGER NOT NULL REFERENCES blood_units(id) ON DELETE CASCADE,
+    alert_type VARCHAR(50) NOT NULL,
+    severity VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+    message TEXT NOT NULL,
+    acknowledged BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX idx_notifications_donor
 ON notifications(donor_id);
+
+CREATE INDEX idx_blood_units_status
+ON blood_units(status);
+
+CREATE INDEX idx_blood_units_blood_group
+ON blood_units(blood_group);
+
+CREATE INDEX idx_blood_unit_events_blood_unit
+ON blood_unit_events(blood_unit_id);

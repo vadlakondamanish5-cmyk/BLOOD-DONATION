@@ -59,13 +59,19 @@ export default function DonorNetwork() {
   }, [bloodGroup, availableOnly, search]);
 
   const donorCounts = {
-    eligible: donors.filter((donor) => donor.eligible || donor.eligibility_status === "ELIGIBLE").length,
-    notEligible: donors.filter((donor) => !donor.eligible && donor.eligibility_status !== "ELIGIBLE").length
+    all: donors.length,
+    eligible: donors.filter((donor) => donor.eligible || donor.isEligible || donor.eligibility_status === "ELIGIBLE").length,
+    notEligible: donors.filter((donor) => !donor.eligible && !donor.isEligible && donor.eligibility_status !== "ELIGIBLE").length,
+    availableOnly: donors.filter((donor) => (donor.eligible || donor.isEligible || donor.eligibility_status === "ELIGIBLE") && donor.is_available && donor.donation_consent).length
   };
 
   const visibleDonors = donors.filter((donor) => {
-    const donorState = donor.eligible || donor.eligibility_status === "ELIGIBLE" ? "eligible" : "not_eligible";
-    const matchesCategory = activeFilter === "eligible" ? donorState === "eligible" : donorState === "not_eligible";
+    const isElig = donor.eligible || donor.isEligible || donor.eligibility_status === "ELIGIBLE";
+    let matchesCategory = true;
+    if (activeFilter === "eligible") matchesCategory = isElig;
+    else if (activeFilter === "not_eligible") matchesCategory = !isElig;
+    else if (activeFilter === "available_only") matchesCategory = isElig && donor.is_available && donor.donation_consent;
+
     const matchesSearch = !search || donor.full_name?.toLowerCase().includes(search.toLowerCase()) || donor.phone?.includes(search);
     return matchesCategory && matchesSearch;
   });
@@ -158,11 +164,13 @@ export default function DonorNetwork() {
 
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {[
-              { key: "eligible", label: "Eligible", tone: "green" },
-              { key: "not_eligible", label: "Not Eligible", tone: "red" }
+              { key: "all", label: "All Donors", count: donorCounts.all, tone: "slate", icon: "" },
+              { key: "eligible", label: "Eligible", count: donorCounts.eligible, tone: "green", icon: "🟢 " },
+              { key: "not_eligible", label: "Not Eligible", count: donorCounts.notEligible, tone: "red", icon: "🔴 " },
+              { key: "available_only", label: "Available Only", count: donorCounts.availableOnly, tone: "cyan", icon: "⚡ " }
             ].map((option) => {
               const isActive = activeFilter === option.key;
-              const count = option.key === "eligible" ? donorCounts.eligible : donorCounts.notEligible;
+              const count = option.count;
               return (
                 <button
                   key={option.key}
@@ -172,18 +180,21 @@ export default function DonorNetwork() {
                     border: isActive ? "1px solid transparent" : "1px solid rgba(255,255,255,0.12)",
                     borderRadius: "12px",
                     padding: "10px 16px",
-                    minWidth: "170px",
                     fontWeight: 700,
                     cursor: "pointer",
                     background: isActive
                       ? option.tone === "green"
                         ? "linear-gradient(135deg, rgba(34,197,94,0.2), rgba(22,163,74,0.12))"
-                        : "linear-gradient(135deg, rgba(239,68,68,0.2), rgba(220,38,38,0.12))"
+                        : option.tone === "red"
+                        ? "linear-gradient(135deg, rgba(239,68,68,0.2), rgba(220,38,38,0.12))"
+                        : option.tone === "cyan"
+                        ? "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(14,165,233,0.12))"
+                        : "rgba(255,255,255,0.15)"
                       : "rgba(15, 23, 42, 0.7)",
-                    color: option.tone === "green" ? "#bbf7d0" : "#fecaca",
+                    color: option.tone === "green" ? "#bbf7d0" : option.tone === "red" ? "#fecaca" : option.tone === "cyan" ? "#a5f3fc" : "#f8fafc",
                   }}
                 >
-                  {option.tone === "green" ? "🟢" : "🔴"} {option.label} ({count})
+                  {option.icon}{option.label} ({count})
                 </button>
               );
             })}

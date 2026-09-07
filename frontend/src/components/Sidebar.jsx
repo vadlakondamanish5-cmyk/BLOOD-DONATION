@@ -9,7 +9,8 @@ import {
   Bell, 
   ShieldCheck,
   X,
-  BarChart3
+  BarChart3,
+  Truck
 } from "lucide-react";
 import BloodDropIcon from "./BloodDropIcon";
 
@@ -21,6 +22,7 @@ export default function Sidebar({ activePage, setActivePage, isMobileOpen, setIs
     { id: "register", label: "Register as Donor", icon: UserPlus },
     { id: "matches", label: "Matched Donors", icon: Target },
     { id: "map", label: "Live Map", icon: MapPin },
+    { id: "tracking", label: "Blood Tracking", icon: Truck },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "analytics", label: "Analytics", icon: BarChart3 },
     { id: "consent", label: "Consent Vault", icon: ShieldCheck }

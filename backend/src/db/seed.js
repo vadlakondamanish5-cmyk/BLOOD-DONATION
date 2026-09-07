@@ -9,130 +9,137 @@ async function seed() {
     try {
         await client.query("BEGIN");
 
-        // 1. Clear existing data in correct FK order
-        console.log("🧹 Clearing old records...");
-        await client.query("DELETE FROM notifications");
+        // 1. Ensure table schema has all columns from schema.sql
+        await client.query(`
+            ALTER TABLE donors ADD COLUMN IF NOT EXISTS medical_conditions TEXT;
+            ALTER TABLE donors ADD COLUMN IF NOT EXISTS donation_count INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE donors ADD COLUMN IF NOT EXISTS next_eligibility_date DATE;
+            ALTER TABLE donors ADD COLUMN IF NOT EXISTS donation_cycle_completed BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE donors ADD COLUMN IF NOT EXISTS medical_verification_status VARCHAR(30) NOT NULL DEFAULT 'PENDING';
+            ALTER TABLE donors ADD COLUMN IF NOT EXISTS availability_status VARCHAR(30) NOT NULL DEFAULT 'AVAILABLE';
+        `);
+
+        // 2. Clear old donor records while preserving hospitals and blood requests
+        console.log("🧹 Clearing old donor records...");
+        await client.query("DELETE FROM notifications WHERE donor_id IS NOT NULL");
         await client.query("DELETE FROM consent_logs");
         await client.query("DELETE FROM donor_matches");
-        await client.query("DELETE FROM blood_requests");
-        await client.query("DELETE FROM hospital_blood_stock");
-        await client.query("DELETE FROM donors");
-        await client.query("DELETE FROM hospitals");
+        await client.query("UPDATE blood_units SET donor_id = NULL WHERE donor_id IS NOT NULL");
+        await client.query("TRUNCATE TABLE donors RESTART IDENTITY CASCADE");
 
-        // Reset identity sequences
-        await client.query("ALTER SEQUENCE hospitals_id_seq RESTART WITH 1");
-        await client.query("ALTER SEQUENCE hospital_blood_stock_id_seq RESTART WITH 1");
-        await client.query("ALTER SEQUENCE donors_id_seq RESTART WITH 1");
-        await client.query("ALTER SEQUENCE blood_requests_id_seq RESTART WITH 1");
-        await client.query("ALTER SEQUENCE donor_matches_id_seq RESTART WITH 1");
-        await client.query("ALTER SEQUENCE consent_logs_id_seq RESTART WITH 1");
-        await client.query("ALTER SEQUENCE notifications_id_seq RESTART WITH 1");
+        // 3. Ensure hospitals exist
+        const hospCountRes = await client.query("SELECT COUNT(*) FROM hospitals");
+        let hospitalIds = [];
 
-        // 2. Insert Hospitals
-        console.log("🏥 Inserting Verified Hospitals...");
-        const hospitalsData = [
-            {
-                name: "Apollo Hospitals - Bannerghatta",
-                contact: "Dr. Arvind Kumar (Blood Bank Chief)",
-                phone: "+91 80 2630 4050",
-                email: "bloodbank.bannerghatta@apollo.org",
-                lat: 12.8938,
-                lon: 77.5976,
-                verified: true
-            },
-            {
-                name: "Manipal Hospital - HAL Airport Rd",
-                contact: "Dr. Sunita Rao (Emergency HOD)",
-                phone: "+91 80 2502 4444",
-                email: "emergency@manipalhospitals.com",
-                lat: 12.9587,
-                lon: 77.6489,
-                verified: true
-            },
-            {
-                name: "Fortis Hospital - Cunningham Rd",
-                contact: "Sister Mercy (Trauma Desk)",
-                phone: "+91 80 4199 4444",
-                email: "trauma.desk@fortishealthcare.com",
-                lat: 12.9866,
-                lon: 77.5954,
-                verified: true
-            },
-            {
-                name: "Narayana Health City - Hosur Rd",
-                contact: "Dr. Devi Prasad (Cardiac ICU)",
-                phone: "+91 80 7122 2222",
-                email: "bloodunit@narayanahealth.org",
-                lat: 12.8184,
-                lon: 77.6974,
-                verified: true
-            },
-            {
-                name: "St. John's Medical College Hospital",
-                contact: "Dr. George Thomas (Transfusion Unit)",
-                phone: "+91 80 4946 6000",
-                email: "transfusion@stjohns.in",
-                lat: 12.9312,
-                lon: 77.6215,
-                verified: true
-            },
-            {
-                name: "Victoria Hospital - City Market",
-                contact: "Govt Trauma Care Desk",
-                phone: "+91 80 2670 1150",
-                email: "trauma@victoriahospital.kar.nic.in",
-                lat: 12.9634,
-                lon: 77.5756,
-                verified: true
-            }
-        ];
+        if (parseInt(hospCountRes.rows[0].count, 10) === 0) {
+            console.log("🏥 Inserting Verified Hospitals...");
+            const hospitalsData = [
+                {
+                    name: "Apollo Hospitals - Bannerghatta",
+                    contact: "Dr. Arvind Kumar (Blood Bank Chief)",
+                    phone: "+91 80 2630 4050",
+                    email: "bloodbank.bannerghatta@apollo.org",
+                    lat: 12.8938,
+                    lon: 77.5976,
+                    verified: true
+                },
+                {
+                    name: "Manipal Hospital - HAL Airport Rd",
+                    contact: "Dr. Sunita Rao (Emergency HOD)",
+                    phone: "+91 80 2502 4444",
+                    email: "emergency@manipalhospitals.com",
+                    lat: 12.9587,
+                    lon: 77.6489,
+                    verified: true
+                },
+                {
+                    name: "Fortis Hospital - Cunningham Rd",
+                    contact: "Sister Mercy (Trauma Desk)",
+                    phone: "+91 80 4199 4444",
+                    email: "trauma.desk@fortishealthcare.com",
+                    lat: 12.9866,
+                    lon: 77.5954,
+                    verified: true
+                },
+                {
+                    name: "Narayana Health City - Hosur Rd",
+                    contact: "Dr. Devi Prasad (Cardiac ICU)",
+                    phone: "+91 80 7122 2222",
+                    email: "bloodunit@narayanahealth.org",
+                    lat: 12.8184,
+                    lon: 77.6974,
+                    verified: true
+                },
+                {
+                    name: "St. John's Medical College Hospital",
+                    contact: "Dr. George Thomas (Transfusion Unit)",
+                    phone: "+91 80 4946 6000",
+                    email: "transfusion@stjohns.in",
+                    lat: 12.9312,
+                    lon: 77.6215,
+                    verified: true
+                },
+                {
+                    name: "Victoria Hospital - City Market",
+                    contact: "Govt Trauma Care Desk",
+                    phone: "+91 80 2670 1150",
+                    email: "trauma@victoriahospital.kar.nic.in",
+                    lat: 12.9634,
+                    lon: 77.5756,
+                    verified: true
+                }
+            ];
 
-        const hospitalIds = [];
-        for (const h of hospitalsData) {
-            const res = await client.query(
-                `INSERT INTO hospitals (hospital_name, contact_person, phone, email, latitude, longitude, verified)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-                [h.name, h.contact, h.phone, h.email, h.lat, h.lon, h.verified]
-            );
-            hospitalIds.push(res.rows[0].id);
-        }
-
-        const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
-        const hospitalStockValues = [
-            { "A+": 12, "A-": 4, "B+": 9, "B-": 2, "AB+": 5, "AB-": 1, "O+": 14, "O-": 3 },
-            { "A+": 8, "A-": 5, "B+": 6, "B-": 3, "AB+": 4, "AB-": 2, "O+": 10, "O-": 0 },
-            { "A+": 15, "A-": 7, "B+": 11, "B-": 4, "AB+": 6, "AB-": 3, "O+": 18, "O-": 5 },
-            { "A+": 6, "A-": 2, "B+": 5, "B-": 1, "AB+": 3, "AB-": 0, "O+": 7, "O-": 2 },
-            { "A+": 10, "A-": 6, "B+": 8, "B-": 2, "AB+": 5, "AB-": 1, "O+": 9, "O-": 4 },
-            { "A+": 9, "A-": 3, "B+": 7, "B-": 2, "AB+": 4, "AB-": 0, "O+": 12, "O-": 1 }
-        ];
-
-        for (let index = 0; index < hospitalIds.length; index += 1) {
-            const hospitalId = hospitalIds[index];
-            const stockMap = hospitalStockValues[index] || { "A+": 0, "A-": 0, "B+": 0, "B-": 0, "AB+": 0, "AB-": 0, "O+": 0, "O-": 0 };
-
-            for (const group of bloodGroups) {
-                await client.query(
-                    `INSERT INTO hospital_blood_stock (hospital_id, blood_group, units_available, last_updated, created_at, updated_at)
-                     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-                    [hospitalId, group, Number(stockMap[group] || 0)]
+            for (const h of hospitalsData) {
+                const res = await client.query(
+                    `INSERT INTO hospitals (hospital_name, contact_person, phone, email, latitude, longitude, verified)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+                    [h.name, h.contact, h.phone, h.email, h.lat, h.lon, h.verified]
                 );
+                hospitalIds.push(res.rows[0].id);
             }
+
+            const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+            const hospitalStockValues = [
+                { "A+": 12, "A-": 4, "B+": 9, "B-": 2, "AB+": 5, "AB-": 1, "O+": 14, "O-": 3 },
+                { "A+": 8, "A-": 5, "B+": 6, "B-": 3, "AB+": 4, "AB-": 2, "O+": 10, "O-": 0 },
+                { "A+": 15, "A-": 7, "B+": 11, "B-": 4, "AB+": 6, "AB-": 3, "O+": 18, "O-": 5 },
+                { "A+": 6, "A-": 2, "B+": 5, "B-": 1, "AB+": 3, "AB-": 0, "O+": 7, "O-": 2 },
+                { "A+": 10, "A-": 6, "B+": 8, "B-": 2, "AB+": 5, "AB-": 1, "O+": 9, "O-": 4 },
+                { "A+": 9, "A-": 3, "B+": 7, "B-": 2, "AB+": 4, "AB-": 0, "O+": 12, "O-": 1 }
+            ];
+
+            for (let idx = 0; idx < hospitalIds.length; idx += 1) {
+                const hId = hospitalIds[idx];
+                const stockMap = hospitalStockValues[idx] || {};
+                for (const grp of bloodGroups) {
+                    await client.query(
+                        `INSERT INTO hospital_blood_stock (hospital_id, blood_group, units_available, last_updated)
+                         VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+                         ON CONFLICT (hospital_id, blood_group) DO UPDATE SET units_available = EXCLUDED.units_available`,
+                        [hId, grp, Number(stockMap[grp] || 0)]
+                    );
+                }
+            }
+        } else {
+            const hRes = await client.query("SELECT id FROM hospitals ORDER BY id ASC");
+            hospitalIds = hRes.rows.map((r) => r.id);
+            console.log(`🏥 Found ${hospitalIds.length} existing verified hospitals.`);
         }
 
-        // 3. Insert a large synthetic donor network that stays within the existing database schema
-        console.log("🩸 Inserting synthetic donor dataset with balanced blood group distribution...");
+        // 4. Generate 1000 Synthetic Donors: ~700 Eligible and ~300 Not Eligible
+        console.log("🩸 Generating 1,000 synthetic donors with balanced eligibility across all 8 blood groups...");
 
-        const targetDistribution = {
-            "A+": 300,
-            "A-": 70,
-            "B+": 250,
-            "B-": 60,
-            "AB+": 80,
-            "AB-": 20,
-            "O+": 180,
-            "O-": 40
-        };
+        const targetDistribution = [
+            { group: "O+", eligible: 245, notEligible: 105 }, // total 350
+            { group: "A+", eligible: 175, notEligible: 75 },  // total 250
+            { group: "B+", eligible: 140, notEligible: 60 },  // total 200
+            { group: "AB+", eligible: 42, notEligible: 18 },  // total 60
+            { group: "O-", eligible: 35, notEligible: 15 },   // total 50
+            { group: "A-", eligible: 28, notEligible: 12 },   // total 40
+            { group: "B-", eligible: 21, notEligible: 9 },    // total 30
+            { group: "AB-", eligible: 14, notEligible: 6 },   // total 20
+        ];
 
         const firstNames = [
             "Aarav", "Anika", "Diya", "Rohan", "Neha", "Vikram", "Meera", "Kabir", "Ishita", "Aditya",
@@ -150,198 +157,152 @@ async function seed() {
             "Sundaram", "Iyengar", "Murthy", "Lal", "Adiga", "Katti", "Nambiar", "Ilangovan", "Natarajan", "Dixit"
         ];
 
-        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-        const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+        const localities = [
+            { name: "Koramangala", lat: 12.9352, lon: 77.6245 },
+            { name: "Indiranagar", lat: 12.9784, lon: 77.6408 },
+            { name: "Jayanagar", lat: 12.9308, lon: 77.5838 },
+            { name: "Whitefield", lat: 12.9698, lon: 77.7499 },
+            { name: "HSR Layout", lat: 12.9121, lon: 77.6446 },
+            { name: "Bannerghatta Rd", lat: 12.8938, lon: 77.5976 },
+            { name: "Malleshwaram", lat: 13.0031, lon: 77.5643 },
+            { name: "Electronic City", lat: 12.8399, lon: 77.6770 },
+            { name: "BTM Layout", lat: 12.9166, lon: 77.6101 },
+            { name: "Hebbal", lat: 13.0358, lon: 77.5970 }
+        ];
 
-        const padPhone = (value) => String(value).padStart(10, "0");
+        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+        const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
         const toDateString = (date) => date.toISOString().slice(0, 10);
 
         const syntheticDonors = [];
-        const usedEmails = new Set();
-        const usedPhones = new Set();
-
+        let globalDonorSeq = 1;
         const now = new Date();
-        const addDaysToDate = (days) => {
-            const date = new Date(now);
-            date.setDate(date.getDate() + days);
-            return date.toISOString().slice(0, 10);
-        };
 
-        const featuredDonors = [
-            {
-                full_name: "Rahul Kumar",
-                phone: "+91 9876543210",
-                email: "rahul.kumar@hexavision.demo",
-                blood_group: "O-",
-                latitude: 12.9716,
-                longitude: 77.5946,
-                donation_consent: true,
-                emergency_contact_consent: true,
-                is_available: true,
-                last_donation_date: "2026-06-10",
-                donation_count: 3,
-                next_eligibility_date: "2026-09-08",
-                donation_cycle_completed: true,
-                medical_verification_status: "VERIFIED",
-                availability_status: "AVAILABLE"
-            },
-            {
-                full_name: "Arjun Reddy",
-                phone: "+91 9765432109",
-                email: "arjun.reddy@hexavision.demo",
-                blood_group: "O-",
-                latitude: 12.9416,
-                longitude: 77.6046,
-                donation_consent: true,
-                emergency_contact_consent: true,
-                is_available: true,
-                last_donation_date: "2026-09-01",
-                donation_count: 2,
-                next_eligibility_date: "2026-11-01",
-                donation_cycle_completed: false,
-                medical_verification_status: "VERIFIED",
-                availability_status: "AVAILABLE"
-            },
-            {
-                full_name: "Priya Nair",
-                phone: "+91 9654321098",
-                email: "priya.nair@hexavision.demo",
-                blood_group: "B+",
-                latitude: 12.9316,
-                longitude: 77.6226,
-                donation_consent: true,
-                emergency_contact_consent: false,
-                is_available: false,
-                last_donation_date: "2026-08-10",
-                donation_count: 2,
-                next_eligibility_date: "2026-10-10",
-                donation_cycle_completed: false,
-                medical_verification_status: "PENDING",
-                availability_status: "UNAVAILABLE"
-            },
-            {
-                full_name: "Karan Singh",
-                phone: "+91 9543210987",
-                email: "karan.singh@hexavision.demo",
-                blood_group: "A+",
-                latitude: 12.9146,
-                longitude: 77.6186,
-                donation_consent: true,
-                emergency_contact_consent: true,
-                is_available: true,
-                last_donation_date: "2026-06-12",
-                donation_count: 4,
-                next_eligibility_date: "2026-08-11",
-                donation_cycle_completed: true,
-                medical_verification_status: "PENDING",
-                availability_status: "AVAILABLE"
-            }
-        ];
+        for (const dist of targetDistribution) {
+            const bg = dist.group;
 
-        featuredDonors.forEach((donor) => syntheticDonors.push({ ...donor, synthetic_health: { condition: "None", medication: "No routine medication", surgery: "No prior surgery", eligibility: "Scenario for demo" } }));
-
-        for (const [bloodGroup, targetCount] of Object.entries(targetDistribution)) {
-            for (let i = 0; i < targetCount; i += 1) {
+            // Generate ELIGIBLE donors
+            for (let i = 0; i < dist.eligible; i += 1) {
+                const seq = globalDonorSeq++;
                 const firstName = firstNames[randomInt(0, firstNames.length - 1)];
                 const lastName = lastNames[randomInt(0, lastNames.length - 1)];
-                const name = `${firstName} ${lastName}`;
-                const baseHospital = hospitalsData[randomInt(0, hospitalsData.length - 1)];
-                const distanceKm = Math.random() * 15 + 1.5;
-                const angle = Math.random() * Math.PI * 2;
-                const latOffset = (distanceKm / 111.32) * Math.cos(angle);
-                const lonOffset = (distanceKm / (111.32 * Math.cos((baseHospital.lat * Math.PI) / 180))) * Math.sin(angle);
-                const lat = Number(clamp(baseHospital.lat + latOffset, 12.7, 13.1).toFixed(5));
-                const lon = Number(clamp(baseHospital.lon + lonOffset, 77.45, 77.82).toFixed(5));
+                const fullName = `${firstName} ${lastName}`;
+                const loc = localities[randomInt(0, localities.length - 1)];
+                const lat = Number(clamp(loc.lat + (Math.random() - 0.5) * 0.08, 12.75, 13.15).toFixed(5));
+                const lon = Number(clamp(loc.lon + (Math.random() - 0.5) * 0.08, 77.48, 77.80).toFixed(5));
 
-                let donationConsent = Math.random() < 0.88;
-                let emergencyConsent = Math.random() < 0.76;
-                let isAvailable = Math.random() < 0.65;
-                let lastDonationDaysAgo = Math.max(0, randomInt(0, 240));
+                const phone = `+91 9${String(800000000 + seq).padStart(9, "0")}`;
+                const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${seq}@hexavision.demo`;
 
-                if (lastDonationDaysAgo <= 89) {
-                    isAvailable = false;
-                } else if (lastDonationDaysAgo >= 120) {
-                    isAvailable = Math.random() < 0.78;
+                // 15% first-time donors (null last donation date), 85% completed cooldown repeat donors
+                const isFirstTime = Math.random() < 0.15;
+                let lastDonationDate = null;
+                let nextEligibilityDate = null;
+                let donationCount = 0;
+
+                if (!isFirstTime) {
+                    // Cooldown completed: donated 92 to 280 days ago
+                    const daysAgo = randomInt(92, 280);
+                    const dDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+                    lastDonationDate = toDateString(dDate);
+                    const nextDate = new Date(dDate.getTime() + 90 * 24 * 60 * 60 * 1000);
+                    nextEligibilityDate = toDateString(nextDate);
+                    donationCount = randomInt(1, 12);
                 }
 
-                if (Math.random() < 0.12) {
-                    donationConsent = false;
-                }
-                if (Math.random() < 0.18) {
-                    emergencyConsent = false;
-                }
-
-                if (!isAvailable && Math.random() < 0.24) {
-                    lastDonationDaysAgo = randomInt(15, 89);
-                }
-
-                const lastDonationDate = lastDonationDaysAgo === 0
-                    ? null
-                    : new Date(Date.now() - lastDonationDaysAgo * 24 * 60 * 60 * 1000);
-
-                const donationCycleCompleted = lastDonationDaysAgo >= 90;
-                const verificationStatus = Math.random() < 0.72 ? "VERIFIED" : (Math.random() < 0.5 ? "PENDING" : "REQUIRED");
-                const availabilityStatus = isAvailable ? "AVAILABLE" : (Math.random() < 0.5 ? "ON_COOLDOWN" : "TEMPORARILY_INELIGIBLE");
-                const syntheticHealthProfile = {
-                    condition: ["None", "Controlled hypertension", "Mild anemia", "Asthma", "Thyroid management"][randomInt(0, 4)],
-                    medication: Math.random() < 0.32 ? "Routine medication in use" : "No routine medication",
-                    surgery: Math.random() < 0.28 ? "Previous procedure in the past 2 years" : "No prior surgery",
-                    eligibility: donationCycleCompleted && verificationStatus === "VERIFIED" && isAvailable ? "Eligible for donation screening" : "Temporary ineligibility due to recent donation or recovery window"
-                };
-
-                const nextEligibilityDate = lastDonationDate ? new Date(lastDonationDate.getTime() + (90 * 24 * 60 * 60 * 1000)) : null;
-
-                let phone = `+91 ${padPhone(randomInt(7000000000, 9999999999))}`;
-                while (usedPhones.has(phone)) {
-                    phone = `+91 ${padPhone(randomInt(7000000000, 9999999999))}`;
-                }
-                usedPhones.add(phone);
-
-                let email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${randomInt(100, 9999)}@synthetic.demo`;
-                while (usedEmails.has(email)) {
-                    email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${randomInt(100, 9999)}@synthetic.demo`;
-                }
-                usedEmails.add(email);
+                // ~72% available and consented for AVAILABLE ONLY filter
+                const isAvailable = Math.random() < 0.73;
+                const donationConsent = Math.random() < 0.95;
+                const emergencyConsent = Math.random() < 0.88;
 
                 syntheticDonors.push({
-                    full_name: name,
+                    full_name: fullName,
                     phone,
                     email,
-                    blood_group: bloodGroup,
+                    blood_group: bg,
+                    medical_conditions: null,
                     latitude: lat,
                     longitude: lon,
                     donation_consent: donationConsent,
                     emergency_contact_consent: emergencyConsent,
                     is_available: isAvailable,
-                    last_donation_date: lastDonationDate ? toDateString(lastDonationDate) : null,
-                    donation_count: Math.max(1, Math.floor(20 - lastDonationDaysAgo / 30 + Math.random() * 3)),
-                    next_eligibility_date: nextEligibilityDate ? toDateString(nextEligibilityDate) : null,
-                    donation_cycle_completed: donationCycleCompleted,
-                    medical_verification_status: verificationStatus,
-                    availability_status: availabilityStatus,
-                    synthetic_health: syntheticHealthProfile
+                    last_donation_date: lastDonationDate,
+                    donation_count: donationCount,
+                    next_eligibility_date: nextEligibilityDate,
+                    donation_cycle_completed: true,
+                    medical_verification_status: "VERIFIED",
+                    availability_status: isAvailable ? "AVAILABLE" : "UNAVAILABLE"
+                });
+            }
+
+            // Generate NOT ELIGIBLE donors
+            for (let i = 0; i < dist.notEligible; i += 1) {
+                const seq = globalDonorSeq++;
+                const firstName = firstNames[randomInt(0, firstNames.length - 1)];
+                const lastName = lastNames[randomInt(0, lastNames.length - 1)];
+                const fullName = `${firstName} ${lastName}`;
+                const loc = localities[randomInt(0, localities.length - 1)];
+                const lat = Number(clamp(loc.lat + (Math.random() - 0.5) * 0.08, 12.75, 13.15).toFixed(5));
+                const lon = Number(clamp(loc.lon + (Math.random() - 0.5) * 0.08, 77.48, 77.80).toFixed(5));
+
+                const phone = `+91 8${String(800000000 + seq).padStart(9, "0")}`;
+                const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${seq}@hexavision.demo`;
+
+                // In cooldown: donated 5 to 85 days ago
+                const daysAgo = randomInt(5, 85);
+                const dDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+                const lastDonationDate = toDateString(dDate);
+                const nextDate = new Date(dDate.getTime() + 90 * 24 * 60 * 60 * 1000);
+                const nextEligibilityDate = toDateString(nextDate);
+                const donationCount = randomInt(1, 6);
+
+                // Not eligible donors are ON_COOLDOWN and unavailable for donation
+                const donationConsent = Math.random() < 0.90;
+                const emergencyConsent = Math.random() < 0.80;
+
+                syntheticDonors.push({
+                    full_name: fullName,
+                    phone,
+                    email,
+                    blood_group: bg,
+                    medical_conditions: Math.random() < 0.1 ? "Mild seasonal allergies" : null,
+                    latitude: lat,
+                    longitude: lon,
+                    donation_consent: donationConsent,
+                    emergency_contact_consent: emergencyConsent,
+                    is_available: false,
+                    last_donation_date: lastDonationDate,
+                    donation_count: donationCount,
+                    next_eligibility_date: nextEligibilityDate,
+                    donation_cycle_completed: false,
+                    medical_verification_status: "VERIFIED",
+                    availability_status: "ON_COOLDOWN"
                 });
             }
         }
 
-        const donorChunks = [];
-        for (let i = 0; i < syntheticDonors.length; i += 250) {
-            donorChunks.push(syntheticDonors.slice(i, i + 250));
-        }
+        console.log(`📦 Prepared ${syntheticDonors.length} synthetic donors. Inserting in batches...`);
 
-        const donorIds = [];
-        for (const chunk of donorChunks) {
-            const values = [];
+        // Batch insert donors
+        const batchSize = 100;
+        const insertedDonorIds = [];
+
+        for (let i = 0; i < syntheticDonors.length; i += batchSize) {
+            const batch = syntheticDonors.slice(i, i + batchSize);
             const placeholders = [];
+            const values = [];
 
-            chunk.forEach((donor, donorIndex) => {
-                const rowIndex = donorIndex * 10;
-                placeholders.push(`($${rowIndex + 1}, $${rowIndex + 2}, $${rowIndex + 3}, $${rowIndex + 4}, $${rowIndex + 5}, $${rowIndex + 6}, $${rowIndex + 7}, $${rowIndex + 8}, $${rowIndex + 9}, $${rowIndex + 10}, $${rowIndex + 11}, $${rowIndex + 12}, $${rowIndex + 13}, $${rowIndex + 14}, $${rowIndex + 15})`);
+            batch.forEach((donor, idx) => {
+                const offset = idx * 16;
+                placeholders.push(
+                    `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16})`
+                );
                 values.push(
                     donor.full_name,
                     donor.phone,
                     donor.email,
                     donor.blood_group,
+                    donor.medical_conditions,
                     donor.latitude,
                     donor.longitude,
                     donor.donation_consent,
@@ -356,127 +317,121 @@ async function seed() {
                 );
             });
 
-            const insertResult = await client.query(
+            const insertRes = await client.query(
                 `INSERT INTO donors (
-                    full_name, phone, email, blood_group, latitude, longitude,
-                    donation_consent, emergency_contact_consent, is_available, last_donation_date
+                    full_name, phone, email, blood_group, medical_conditions, latitude, longitude,
+                    donation_consent, emergency_contact_consent, is_available, last_donation_date,
+                    donation_count, next_eligibility_date, donation_cycle_completed,
+                    medical_verification_status, availability_status
                 ) VALUES ${placeholders.join(", ")} RETURNING id`,
                 values
             );
 
-            donorIds.push(...insertResult.rows.map((row) => row.id));
+            insertedDonorIds.push(...insertRes.rows.map((r) => r.id));
 
-            for (const [index, row] of insertResult.rows.entries()) {
-                const donor = chunk[index];
+            // Log consent for inserted batch
+            for (let bIdx = 0; bIdx < insertRes.rows.length; bIdx += 1) {
+                const donorId = insertRes.rows[bIdx].id;
+                const dObj = batch[bIdx];
                 await client.query(
                     `INSERT INTO consent_logs (donor_id, consent_type, consent_given)
                      VALUES ($1, 'GENERAL_DONATION', $2), ($1, 'EMERGENCY_CONTACT', $3)`,
-                    [row.id, donor.donation_consent, donor.emergency_contact_consent]
+                    [donorId, dObj.donation_consent, dObj.emergency_contact_consent]
                 );
             }
         }
 
-        const duplicatePhoneCheck = await client.query(
-            `SELECT COUNT(*) AS duplicate_phone_count FROM (
-                SELECT phone FROM donors GROUP BY phone HAVING COUNT(*) > 1
-            ) dup`
-        );
-        const duplicateEmailCheck = await client.query(
-            `SELECT COUNT(*) AS duplicate_email_count FROM (
-                SELECT email FROM donors WHERE email IS NOT NULL GROUP BY email HAVING COUNT(*) > 1
-            ) dup`
-        );
+        console.log(`✅ Successfully inserted ${insertedDonorIds.length} synthetic donors.`);
 
-        if (Number(duplicatePhoneCheck.rows[0].duplicate_phone_count) > 0 || Number(duplicateEmailCheck.rows[0].duplicate_email_count) > 0) {
-            throw new Error("Duplicate donor phone or email detected after seeding.");
-        }
+        // 5. Ensure Blood Requests exist
+        const reqCountRes = await client.query("SELECT COUNT(*) FROM blood_requests");
+        let activeRequestIds = [];
 
-        const donorDistribution = await client.query(
-            `SELECT blood_group, COUNT(*) AS total FROM donors GROUP BY blood_group ORDER BY blood_group`
-        );
+        if (parseInt(reqCountRes.rows[0].count, 10) === 0) {
+            console.log("🚨 Inserting Sample Blood Requests...");
+            const requestsData = [
+                {
+                    hospital_id: hospitalIds[0],
+                    blood_group: "O-",
+                    units_required: 2,
+                    urgency: "CRITICAL",
+                    required_by: new Date(Date.now() + 2 * 60 * 60 * 1000),
+                    lat: 12.8938,
+                    lon: 77.5976
+                },
+                {
+                    hospital_id: hospitalIds[1],
+                    blood_group: "B+",
+                    units_required: 3,
+                    urgency: "URGENT",
+                    required_by: new Date(Date.now() + 8 * 60 * 60 * 1000),
+                    lat: 12.9587,
+                    lon: 77.6489
+                },
+                {
+                    hospital_id: hospitalIds[2],
+                    blood_group: "A+",
+                    units_required: 1,
+                    urgency: "NORMAL",
+                    required_by: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                    lat: 12.9866,
+                    lon: 77.5954
+                },
+                {
+                    hospital_id: hospitalIds[4] || hospitalIds[0],
+                    blood_group: "AB-",
+                    units_required: 1,
+                    urgency: "CRITICAL",
+                    required_by: new Date(Date.now() + 1 * 60 * 60 * 1000),
+                    lat: 12.9312,
+                    lon: 77.6215
+                }
+            ];
 
-        console.log("📊 Synthetic donor distribution:");
-        donorDistribution.rows.forEach((row) => {
-            console.log(`   - ${row.blood_group}: ${row.total}`);
-        });
-
-        console.log(`🧪 Synthetic donor inventory ready: ${donorIds.length} donors inserted.`);
-
-        // 4. Insert Sample Blood Requests
-        console.log("🚨 Inserting Sample Blood Requests...");
-        const requestsData = [
-            {
-                hospital_id: hospitalIds[0], // Apollo Bannerghatta
-                blood_group: "O-",
-                units_required: 2,
-                urgency: "CRITICAL",
-                required_by: new Date(Date.now() + 2 * 60 * 60 * 1000), // In 2 hours
-                lat: 12.8938,
-                lon: 77.5976
-            },
-            {
-                hospital_id: hospitalIds[1], // Manipal Hospital
-                blood_group: "B+",
-                units_required: 3,
-                urgency: "URGENT",
-                required_by: new Date(Date.now() + 8 * 60 * 60 * 1000), // In 8 hours
-                lat: 12.9587,
-                lon: 77.6489
-            },
-            {
-                hospital_id: hospitalIds[2], // Fortis Cunningham
-                blood_group: "A+",
-                units_required: 1,
-                urgency: "NORMAL",
-                required_by: new Date(Date.now() + 24 * 60 * 60 * 1000), // In 24 hours
-                lat: 12.9866,
-                lon: 77.5954
-            },
-            {
-                hospital_id: hospitalIds[4], // St. John's
-                blood_group: "AB-",
-                units_required: 1,
-                urgency: "CRITICAL",
-                required_by: new Date(Date.now() + 1 * 60 * 60 * 1000), // In 1 hour
-                lat: 12.9312,
-                lon: 77.6215
+            for (const r of requestsData) {
+                const res = await client.query(
+                    `INSERT INTO blood_requests (
+                        hospital_id, blood_group, units_required, urgency, required_by, status, latitude, longitude
+                    ) VALUES ($1, $2, $3, $4, $5, 'OPEN', $6, $7) RETURNING id`,
+                    [r.hospital_id, r.blood_group, r.units_required, r.urgency, r.required_by, r.lat, r.lon]
+                );
+                activeRequestIds.push(res.rows[0].id);
             }
-        ];
-
-        const requestIds = [];
-        for (const r of requestsData) {
-            const res = await client.query(
-                `INSERT INTO blood_requests (
-                    hospital_id, blood_group, units_required, urgency, required_by, status, latitude, longitude
-                ) VALUES ($1, $2, $3, $4, $5, 'OPEN', $6, $7) RETURNING id`,
-                [r.hospital_id, r.blood_group, r.units_required, r.urgency, r.required_by, r.lat, r.lon]
+        } else {
+            const reqsRes = await client.query(
+                "SELECT id FROM blood_requests WHERE status IN ('OPEN', 'MATCHING') ORDER BY id ASC"
             );
-            requestIds.push(res.rows[0].id);
+            activeRequestIds = reqsRes.rows.map((r) => r.id);
+            console.log(`🚨 Found ${activeRequestIds.length} existing active blood requests.`);
         }
 
         await client.query("COMMIT");
 
-        console.log(`🏥 Hospitals inserted: ${hospitalsData.length}`);
-        console.log(`🩸 Donors inserted: ${donorIds.length}`);
-        console.log(`🚨 Blood requests inserted: ${requestIds.length}`);
+        // 6. Re-run matching engine for active requests with newly seeded donors
+        console.log("⚡ Executing Multi-Factor Matching Engine on active requests...");
+        let totalMatchesGenerated = 0;
+        for (const rId of activeRequestIds) {
+            try {
+                const matches = await matchDonorsForRequest(rId);
+                totalMatchesGenerated += matches.length;
+                console.log(`   - Request #${rId}: matched ${matches.length} eligible donors.`);
+            } catch (mErr) {
+                console.warn(`   - Request #${rId} matching note:`, mErr.message);
+            }
+        }
+        console.log(`🔗 Total matches generated: ${totalMatchesGenerated}`);
 
-        // 5. Trigger Matching Engine & Notifications for seeded requests
-        console.log("⚡ Executing Multi-Factor Matching Engine on seeded requests...");
-        let matchesGenerated = 0;
-        for (const reqId of requestIds) {
-            const matches = await matchDonorsForRequest(reqId);
-            matchesGenerated += matches.length;
-            console.log(`   - Request #${reqId}: matched ${matches.length} donors.`);
+        // Broadcast notifications for first request if available
+        if (activeRequestIds.length > 0) {
+            try {
+                const notifs = await broadcastToMatchedDonors(activeRequestIds[0], 3, "SMS");
+                console.log(`📲 Dispatched ${notifs.length} alerts for Request #${activeRequestIds[0]}.`);
+            } catch (nErr) {
+                console.warn("Notification dispatch note:", nErr.message);
+            }
         }
 
-        console.log(`🔗 Matches generated: ${matchesGenerated}`);
-
-        // Broadcast to top donors for the first critical request
-        console.log("📲 Broadcasting alerts for Request #1 (CRITICAL O-)...");
-        const notifs = await broadcastToMatchedDonors(requestIds[0], 3, "SMS");
-        console.log(`   - Dispatched ${notifs.length} alerts.`);
-
-        console.log("✅ Database seeding completed successfully");
+        console.log("✅ HexaVision Database Seeding Completed Successfully.");
     } catch (err) {
         await client.query("ROLLBACK");
         console.error("❌ Seeding failed:", err);

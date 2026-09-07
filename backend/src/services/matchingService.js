@@ -33,12 +33,13 @@ async function matchDonorsForRequest(requestId) {
         FROM donors
         WHERE blood_group = ANY($1::varchar[])
           AND donation_consent = TRUE
+          AND is_available = TRUE
     `;
 
     const donorsRes = await pool.query(query, [compatibleGroups]);
     const eligibleDonors = donorsRes.rows.filter((donor) => {
         const eligibility = getEligibilitySummary(donor, request.blood_group);
-        return eligibility.eligible;
+        return eligibility.eligible && donor.is_available === true && donor.donation_consent === true;
     });
 
     if (eligibleDonors.length === 0) {

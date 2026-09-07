@@ -2,8 +2,10 @@ const API_BASE = "http://localhost:5000/api";
 
 async function request(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
+    const token = typeof window !== "undefined" ? localStorage.getItem("hexavision_session_token") : null;
     const headers = {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.headers || {})
     };
 
@@ -72,5 +74,18 @@ export const api = {
         const query = new URLSearchParams(params).toString();
         return request(`/consent/logs${query ? `?${query}` : ""}`);
     },
-    recordConsentLog: (data) => request("/consent/log", { method: "POST", body: JSON.stringify(data) })
+    recordConsentLog: (data) => request("/consent/log", { method: "POST", body: JSON.stringify(data) }),
+
+    // Tracking
+    getTrackingShipments: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        return request(`/tracking${query ? `?${query}` : ""}`);
+    },
+    getTrackingShipmentById: (id) => request(`/tracking/${id}`),
+    getTrackingOverview: () => request("/tracking/overview"),
+
+    // Auth & Session
+    login: (data) => request("/auth/login", { method: "POST", body: JSON.stringify(data) }),
+    register: (data) => request("/auth/register", { method: "POST", body: JSON.stringify(data) }),
+    getMe: () => request("/auth/me")
 };
