@@ -10,19 +10,26 @@ import {
   ShieldCheck,
   X,
   BarChart3,
-  Truck
+  Truck,
+  Building2,
+  Droplet,
+  FileText
 } from "lucide-react";
 import BloodDropIcon from "./BloodDropIcon";
 
-export default function Sidebar({ activePage, setActivePage, isMobileOpen, setIsMobileOpen, criticalCount = 0 }) {
+export default function Sidebar({ activePage, setActivePage, isMobileOpen, setIsMobileOpen, criticalCount = 0, user = null }) {
+  const isDonorUser = Boolean(user && (user.role === "DONOR" || user.accountType === "DONOR" || user.donorRegistered || user.is_donor));
   const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: Activity },
+    { id: "dashboard", label: "Command Board", icon: Activity },
+    { id: "facilities", label: "Facility Directory", icon: Building2 },
+    { id: "inventory", label: "Blood Inventory", icon: Droplet },
     { id: "requests", label: "Emergency Requests", icon: Radio, badge: criticalCount > 0 ? `${criticalCount} SOS` : null },
     { id: "donors", label: "Donor Network", icon: Users },
-    { id: "register", label: "Register as Donor", icon: UserPlus },
+    ...(isDonorUser ? [] : [{ id: "register", label: "Register as Donor", icon: UserPlus }]),
     { id: "matches", label: "Matched Donors", icon: Target },
     { id: "map", label: "Live Map", icon: MapPin },
     { id: "tracking", label: "Blood Tracking", icon: Truck },
+    { id: "audit-logs", label: "Audit Trail", icon: FileText },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "analytics", label: "Analytics", icon: BarChart3 },
     { id: "consent", label: "Consent Vault", icon: ShieldCheck }
@@ -85,7 +92,7 @@ export default function Sidebar({ activePage, setActivePage, isMobileOpen, setIs
       <div className="sidebar-footer">
         <div className="status-indicator">
           <span className="status-dot"></span>
-          <span>Backend Online • 5000</span>
+          <span>Backend Online • 5001</span>
         </div>
         <div className="status-indicator">
           <span className="status-dot" style={{ backgroundColor: "#00f2fe", boxShadow: "0 0 8px #00f2fe" }}></span>

@@ -360,6 +360,67 @@ exports.createDonor = async (req, res) => {
             });
         }
 
+        const cleanPhone = String(phone).replace(/\D/g, "");
+        if (cleanPhone.length !== 10) {
+            return res.status(400).json({
+                success: false,
+                message: "Phone number must be exactly 10 digits for Indian mobile numbers"
+            });
+        }
+
+        // Duplicate donor check
+        const dupCheck = await client.query("SELECT id FROM donors WHERE phone = $1", [cleanPhone]);
+        if (dupCheck.rows.length > 0) {
+            return res.status(409).json({
+                success: false,
+                is_registered: true,
+                message: "This phone number is already registered as a donor. Please sign in instead."
+            });
+        }
+
+        // Backend phone verification check
+        try {
+            const verCheck = await client.query(
+                "SELECT verified FROM phone_verifications WHERE phone = $1",
+                [cleanPhone]
+            );
+            const isDbVerified = verCheck.rows.length > 0 && verCheck.rows[0].verified === true;
+            const authCtrl = require("./authController");
+            const isMemVerified = authCtrl.isPhoneVerifiedInMemory ? authCtrl.isPhoneVerifiedInMemory(cleanPhone) : false;
+
+            if (!isDbVerified && !isMemVerified) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Please verify your phone number with OTP before continuing registration."
+                });
+            }
+        } catch (verErr) {
+            console.warn("Could not check phone verification table:", verErr.message);
+        }
+
+        // Backend email verification check if email entered
+        if (email && String(email).trim()) {
+            const normEmail = String(email).trim().toLowerCase();
+            try {
+                const emailVerCheck = await client.query(
+                    "SELECT verified FROM email_verifications WHERE email = $1",
+                    [normEmail]
+                );
+                const isEmailDbVerified = emailVerCheck.rows.length > 0 && emailVerCheck.rows[0].verified === true;
+                const authCtrl = require("./authController");
+                const isEmailMemVerified = authCtrl.isEmailVerifiedInMemory ? authCtrl.isEmailVerifiedInMemory(normEmail) : false;
+
+                if (!isEmailDbVerified && !isEmailMemVerified) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Please verify your email address with OTP before continuing registration."
+                    });
+                }
+            } catch (emailVerErr) {
+                console.warn("Could not check email verification table:", emailVerErr.message);
+            }
+        }
+
         // Log incoming medical fields for debugging and diagnostics (no sensitive data)
         try {
             console.debug("Incoming medical fields:", {
@@ -399,9 +460,9 @@ exports.createDonor = async (req, res) => {
         `;
 
         const donorRes = await client.query(insertDonorQuery, [
-            full_name,
-            phone,
-            email || null,
+            full_name.trim(),
+            cleanPhone,
+            email ? String(email).trim().toLowerCase() : null,
             blood_group.toUpperCase(),
             medicalConditionsValue,
             latitude || 12.9716,
@@ -427,16 +488,42 @@ exports.createDonor = async (req, res) => {
         );
 
         await client.query("COMMIT");
+
+        const token = `hexavision-donor-session-${donor.id}-${Date.now()}`;
+        const attached = attachEligibility(donor);
+
+        // Ensure donor has record in users table
+        try {
+            const passHash = require("crypto").createHash("sha256").update("HexaVision2026").digest("hex");
+            const existingU = await pool.query("SELECT id FROM users WHERE donor_id = $1 OR phone = $2", [donor.id, cleanPhone]);
+            if (existingU.rows.length === 0) {
+                await pool.query(
+                    `INSERT INTO users (full_name, email, password_hash, role, organization, phone, donor_id)
+                     VALUES ($1, $2, $3, 'donor', 'HexaVision Donor Network', $4, $5)`,
+                    [donor.full_name, donor.email || `${cleanPhone}@donor.hexavision.org`, passHash, cleanPhone, donor.id]
+                );
+            }
+        } catch (uErr) {}
+
         return res.status(201).json({
             success: true,
             message: "Donor registered successfully",
-            donor: attachEligibility(donor)
+            donor: attached,
+            user: { ...attached, role: "donor", accountType: "DONOR", donorRegistered: true },
+            token,
+            role: "donor",
+            accountType: "DONOR",
+            donorRegistered: true
         });
     } catch (err) {
         await client.query("ROLLBACK");
         console.error("DONOR REGISTRATION ERROR:", err);
         if (err.code === "23505") {
-            return res.status(409).json({ success: false, message: "Phone number already registered" });
+            return res.status(409).json({
+                success: false,
+                is_registered: true,
+                message: "This phone number is already registered as a donor. Please sign in instead."
+            });
         }
         return res.status(500).json({
             success: false,
@@ -587,3 +674,5 @@ exports.deleteDonor = async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+exports.attachEligibility = attachEligibility;

@@ -1,8 +1,9 @@
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
+const path = require("path");
 const { Server } = require("socket.io");
-require("dotenv").config();
+require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 
 const pool = require("./db/pool");
 
@@ -15,6 +16,9 @@ const consentRoutes = require("./routes/consentRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
 const bloodUnitRoutes = require("./routes/bloodUnitRoutes");
 const authRoutes = require("./routes/authRoutes");
+const facilityRoutes = require("./routes/facilityRoutes");
+const auditRoutes = require("./routes/auditRoutes");
+const chatRoutes = require("./routes/chatRoutes");
 const { ensureTrackingTables } = require("./controllers/bloodUnitController");
 
 const app = express();
@@ -97,6 +101,9 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/blood-units", bloodUnitRoutes);
 app.use("/api/tracking", bloodUnitRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/facilities", facilityRoutes);
+app.use("/api/audit-logs", auditRoutes);
+app.use("/api/chat", chatRoutes);
 
 // 404 Handler
 app.use((req, res) => {
@@ -115,7 +122,7 @@ app.use((err, req, res, next) => {
     });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 server.listen(PORT, async () => {
     try {

@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5001/api";
 
 async function request(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
@@ -84,8 +84,46 @@ export const api = {
     getTrackingShipmentById: (id) => request(`/tracking/${id}`),
     getTrackingOverview: () => request("/tracking/overview"),
 
+    // Facilities & Unified Blood Network
+    getFacilities: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        return request(`/facilities${query ? `?${query}` : ""}`);
+    },
+    getFacilityById: (id) => request(`/facilities/${id}`),
+    createFacility: (data) => request("/facilities", { method: "POST", body: JSON.stringify(data) }),
+    updateFacility: (id, data) => request(`/facilities/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    verifyFacility: (id, data = {}) => request(`/facilities/${id}/verify`, { method: "POST", body: JSON.stringify(data) }),
+    suspendFacility: (id, data = {}) => request(`/facilities/${id}/suspend`, { method: "POST", body: JSON.stringify(data) }),
+    deboardFacility: (id, data) => request(`/facilities/${id}/deboard`, { method: "POST", body: JSON.stringify(data) }),
+    restoreFacility: (id, data = {}) => request(`/facilities/${id}/restore`, { method: "POST", body: JSON.stringify(data) }),
+    mergeFacilities: (data) => request("/facilities/merge", { method: "POST", body: JSON.stringify(data) }),
+    getFacilityInventory: (id) => request(`/facilities/${id}/inventory`),
+    getFacilityBloodUnits: (id, params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        return request(`/facilities/${id}/blood-units${query ? `?${query}` : ""}`);
+    },
+    getNetworkInventorySummary: () => request("/facilities/summary/inventory"),
+
+    // Audit Logs
+    getAuditLogs: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        return request(`/audit-logs${query ? `?${query}` : ""}`);
+    },
+    createAuditLog: (data) => request("/audit-logs", { method: "POST", body: JSON.stringify(data) }),
+
     // Auth & Session
     login: (data) => request("/auth/login", { method: "POST", body: JSON.stringify(data) }),
     register: (data) => request("/auth/register", { method: "POST", body: JSON.stringify(data) }),
-    getMe: () => request("/auth/me")
+    getMe: () => request("/auth/me"),
+    sendOtp: (phone, is_login = false) => request("/auth/send-otp", { method: "POST", body: JSON.stringify({ phone, is_login }) }),
+    verifyOtp: (phone, otp) => request("/auth/verify-otp", { method: "POST", body: JSON.stringify({ phone, otp }) }),
+    sendEmailOtp: (email) => request("/auth/send-email-otp", { method: "POST", body: JSON.stringify({ email }) }),
+    verifyEmailOtp: (email, otp) => request("/auth/verify-email-otp", { method: "POST", body: JSON.stringify({ email, otp }) }),
+    sendDonorLoginOtp: (phone) => request("/auth/donor-login-otp", { method: "POST", body: JSON.stringify({ phone }) }),
+    verifyDonorLogin: (phone, otp) => request("/auth/verify-donor-login", { method: "POST", body: JSON.stringify({ phone, otp }) }),
+    checkPhone: (phone) => request(`/auth/check-phone/${phone}`),
+
+    // Blood Knowledge AI Chatbot
+    askBloodKnowledge: (message, history = []) =>
+        request("/chat", { method: "POST", body: JSON.stringify({ message, history }) })
 };

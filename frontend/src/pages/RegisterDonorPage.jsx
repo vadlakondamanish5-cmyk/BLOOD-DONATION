@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   MapPin, 
   ShieldCheck, 
@@ -7,10 +7,28 @@ import {
   Lock, 
   Calendar,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  Phone,
+  KeyRound,
+  RotateCw,
+  Clock,
+  Check,
+  Users
 } from "lucide-react";
 import BloodDropIcon from "../components/BloodDropIcon";
 import { api } from "../api/api";
+
+const dateValue = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatDate = (value) => {
+  const date = dateValue(value);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+};
 
 const HEALTH_CONDITIONS = [
   "Diabetes",
@@ -30,7 +48,7 @@ const HEALTH_CONDITIONS = [
   "None of the above"
 ];
 
-export default function RegisterDonorPage({ onRegistrationSuccess }) {
+export default function RegisterDonorPage({ onRegistrationSuccess, onNavigateToHome }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -39,11 +57,37 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
   // Step 1: Personal Info
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpMessage, setOtpMessage] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [devOtpHint, setDevOtpHint] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+  const [phoneExpiry, setPhoneExpiry] = useState(300);
+
+  // Email state (Optional with OTP)
   const [email, setEmail] = useState("");
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [emailOtp, setEmailOtp] = useState("");
+  const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpMessage, setEmailOtpMessage] = useState("");
+  const [emailOtpError, setEmailOtpError] = useState("");
+  const [emailDevOtpHint, setEmailDevOtpHint] = useState("");
+  const [emailCooldown, setEmailCooldown] = useState(0);
+  const [emailExpiry, setEmailExpiry] = useState(300);
+
   const [age, setAge] = useState("");
 
   // Step 2: Blood & Location
   const [bloodGroup, setBloodGroup] = useState("O+");
+  const [stateName, setStateName] = useState("Karnataka");
+  const [cityName, setCityName] = useState("Bangalore");
+  const [areaName, setAreaName] = useState("Central");
   const [locationName, setLocationName] = useState("Bangalore Central");
   const [latitude, setLatitude] = useState("12.9716");
   const [longitude, setLongitude] = useState("77.5946");
@@ -71,10 +115,269 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
   const [consentEmergency, setConsentEmergency] = useState(true);
   const [consentHospitalShare, setConsentHospitalShare] = useState(true);
   const [understandScreening, setUnderstandScreening] = useState(true);
-  const [consentTimestamp, setConsentTimestamp] = useState(new Date().toISOString());
+  const [consentTimestamp] = useState(new Date().toISOString());
 
   // Errors state
   const [errors, setErrors] = useState({});
+  const [registeredDonorStatus, setRegisteredDonorStatus] = useState(null);
+
+  // Phone OTP cooldown timer
+  useEffect(() => {
+    if (cooldown <= 0) return undefined;
+    const timer = setInterval(() => {
+      setCooldown((c) => Math.max(0, c - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  // Phone OTP 5-minute expiration countdown
+  useEffect(() => {
+    if (!otpSent || isPhoneVerified || phoneExpiry <= 0) return undefined;
+    const timer = setInterval(() => {
+      setPhoneExpiry((p) => {
+        if (p <= 1) {
+          setOtpError("OTP expired (5-minute validity). Please request a new OTP.");
+          return 0;
+        }
+        return p - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpSent, isPhoneVerified, phoneExpiry]);
+
+  // Email OTP cooldown timer
+  useEffect(() => {
+    if (emailCooldown <= 0) return undefined;
+    const timer = setInterval(() => {
+      setEmailCooldown((c) => Math.max(0, c - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [emailCooldown]);
+
+  // Email OTP 5-minute expiration countdown
+  useEffect(() => {
+    if (!emailOtpSent || isEmailVerified || emailExpiry <= 0) return undefined;
+    const timer = setInterval(() => {
+      setEmailExpiry((e) => {
+        if (e <= 1) {
+          setEmailOtpError("Email OTP expired. Please request a new OTP.");
+          return 0;
+        }
+        return e - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [emailOtpSent, isEmailVerified, emailExpiry]);
+
+  // Phone number input handler: exactly numeric characters, max 10 digits
+  const handlePhoneChange = (e) => {
+    const raw = e.target.value;
+    const clean = raw.replace(/\D/g, "").slice(0, 10);
+    setPhone(clean);
+
+    if (isPhoneVerified) {
+      setIsPhoneVerified(false);
+      setOtpSent(false);
+      setOtp("");
+      setOtpMessage("");
+      setDevOtpHint("");
+    }
+
+    if (clean.length > 0 && clean.length < 10) {
+      setErrors((prev) => ({
+        ...prev,
+        phone: `Phone number must be exactly 10 digits (${clean.length}/10 entered)`
+      }));
+    } else {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.phone;
+        return next;
+      });
+    }
+  };
+
+  // Email change handler: resets verification if changed
+  const handleEmailChange = (e) => {
+    const val = e.target.value;
+    setEmail(val);
+
+    if (isEmailVerified) {
+      setIsEmailVerified(false);
+      setEmailOtpSent(false);
+      setEmailOtp("");
+      setEmailOtpMessage("");
+      setEmailDevOtpHint("");
+    }
+
+    const trimmed = val.trim();
+    if (trimmed.length > 0) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmed)) {
+        setErrors((prev) => ({
+          ...prev,
+          email: "Please enter a valid email format"
+        }));
+      } else {
+        setErrors((prev) => {
+          const next = { ...prev };
+          delete next.email;
+          return next;
+        });
+      }
+    } else {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.email;
+        return next;
+      });
+    }
+  };
+
+  // OTP Send handler
+  const handleSendOtp = async () => {
+    if (phone.length !== 10) {
+      setErrors((prev) => ({
+        ...prev,
+        phone: "Please enter a valid 10-digit Indian mobile number"
+      }));
+      return;
+    }
+    if (cooldown > 0) return;
+
+    setOtpError("");
+    setOtpMessage("");
+    setIsSendingOtp(true);
+
+    try {
+      const res = await api.sendOtp(phone, false);
+      if (res.success) {
+        setOtpSent(true);
+        setPhoneExpiry(res.expiresIn || 300);
+        setOtpMessage(res.message || `OTP sent to +91 ${phone.slice(0, 5)} ${phone.slice(5)}`);
+        setCooldown(res.cooldown || 30);
+        if (res.dev_otp) {
+          setDevOtpHint(res.dev_otp);
+        }
+      } else {
+        setOtpError(res.message || "Failed to send OTP. Please try again.");
+        if (res.is_registered) {
+          setErrors((prev) => ({
+            ...prev,
+            phone: "This phone number is already registered as a donor. Please sign in instead."
+          }));
+        }
+        if (res.cooldown) setCooldown(res.cooldown);
+      }
+    } catch (err) {
+      const msg = err.message || "Failed to send OTP.";
+      setOtpError(msg);
+      if (msg.includes("already registered")) {
+        setErrors((prev) => ({
+          ...prev,
+          phone: "This phone number is already registered as a donor. Please sign in instead."
+        }));
+      }
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // OTP Verify handler
+  const handleVerifyOtp = async () => {
+    if (!otp || otp.trim().length === 0) {
+      setOtpError("Please enter the OTP received");
+      return;
+    }
+
+    setOtpError("");
+    setIsVerifyingOtp(true);
+
+    try {
+      const res = await api.verifyOtp(phone, otp.trim());
+      if (res.success) {
+        setIsPhoneVerified(true);
+        setOtpError("");
+        setOtpMessage(`✓ Mobile number +91 ${phone} verified successfully`);
+        setErrors((prev) => {
+          const next = { ...prev };
+          delete next.phone;
+          return next;
+        });
+      } else {
+        setOtpError(res.message || "Invalid or expired OTP");
+      }
+    } catch (err) {
+      setOtpError(err.message || "OTP verification failed. Please try again.");
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  // Email OTP Send handler
+  const handleSendEmailOtp = async () => {
+    const norm = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(norm)) {
+      setErrors((prev) => ({
+        ...prev,
+        email: "Please enter a valid email address before requesting OTP"
+      }));
+      return;
+    }
+    if (emailCooldown > 0) return;
+
+    setEmailOtpError("");
+    setEmailOtpMessage("");
+    setIsSendingEmailOtp(true);
+
+    try {
+      const res = await api.sendEmailOtp(norm);
+      if (res.success) {
+        setEmailOtpSent(true);
+        setEmailExpiry(res.expiresIn || 300);
+        setEmailOtpMessage(res.message || `Email OTP sent to ${norm}`);
+        setEmailCooldown(res.cooldown || 30);
+        if (res.dev_otp) setEmailDevOtpHint(res.dev_otp);
+      } else {
+        setEmailOtpError(res.message || "Failed to send email OTP");
+      }
+    } catch (err) {
+      setEmailOtpError(err.message || "Failed to send email OTP");
+    } finally {
+      setIsSendingEmailOtp(false);
+    }
+  };
+
+  // Email OTP Verify handler
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtp || emailOtp.trim().length === 0) {
+      setEmailOtpError("Please enter the email OTP received");
+      return;
+    }
+    setEmailOtpError("");
+    setIsVerifyingEmailOtp(true);
+
+    try {
+      const res = await api.verifyEmailOtp(email.trim().toLowerCase(), emailOtp.trim());
+      if (res.success) {
+        setIsEmailVerified(true);
+        setEmailOtpError("");
+        setEmailOtpMessage("✓ Email verified successfully");
+        setErrors((prev) => {
+          const next = { ...prev };
+          delete next.email;
+          return next;
+        });
+      } else {
+        setEmailOtpError(res.message || "Invalid or expired email OTP");
+      }
+    } catch (err) {
+      setEmailOtpError(err.message || "Email OTP verification failed");
+    } finally {
+      setIsVerifyingEmailOtp(false);
+    }
+  };
 
   // Geolocation trigger
   const handleDetectLocation = () => {
@@ -87,7 +390,7 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
       (pos) => {
         setLatitude(pos.coords.latitude.toFixed(6));
         setLongitude(pos.coords.longitude.toFixed(6));
-        setLocationName("Current GPS Location");
+        setLocationName(`${areaName || "Current GPS"}, ${cityName || "Bangalore"}, ${stateName || "Karnataka"}`);
         setGeoLocating(false);
       },
       (err) => {
@@ -121,19 +424,78 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
     setSelectedConditions(next.length === 0 ? ["None of the above"] : next);
   };
 
+  // Step 3 Live calculation of next eligible donation date based on 90-day waiting period
+  const donationEligibilityPreview = useMemo(() => {
+    if (!lastDonationDate) {
+      return {
+        isEligible: true,
+        label: "Eligible Immediately",
+        statusText: "🟢 First-Time Donor",
+        message: "First-time donors have completed donation cycle and are eligible immediately upon registration.",
+        nextEligibleDate: "Ready Now",
+        daysRemaining: 0
+      };
+    }
+    const lastDate = new Date(lastDonationDate);
+    if (Number.isNaN(lastDate.getTime())) {
+      return null;
+    }
+    const nextDate = new Date(lastDate.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const nextDateStart = new Date(nextDate);
+    nextDateStart.setHours(0, 0, 0, 0);
+
+    const isEligible = today >= nextDateStart;
+    const diffDays = Math.ceil((nextDateStart.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const daysRemaining = isEligible ? 0 : Math.max(1, diffDays);
+
+    return {
+      isEligible,
+      label: isEligible ? "90-Day Waiting Period Completed" : "Cooldown Active",
+      statusText: isEligible ? "🟢 Ready to Donate" : `🟡 Cooldown: ${daysRemaining} Days Remaining`,
+      message: isEligible
+        ? "The mandatory 90-day whole blood interval has elapsed. Donor is eligible for emergency matching."
+        : `Minimum 90-day waiting period active. Eligible on ${formatDate(nextDate.toISOString().slice(0, 10))}.`,
+      nextEligibleDate: nextDate.toISOString().slice(0, 10),
+      daysRemaining
+    };
+  }, [lastDonationDate]);
+
+  // Step 4 Live pre-screening assessment
+  const screeningAssessment = useMemo(() => {
+    const isWell = feelingWell && !recentIllness;
+    const conditions = selectedConditions.filter((c) => c !== "None of the above");
+    const hasConditions = conditions.length > 0;
+
+    return {
+      isEligible: isWell,
+      statusText: isWell ? "🟢 Pre-Screening: Eligible" : "🟡 Temporary Deferral (14-Day Waiting Period)",
+      reason: isWell
+        ? "Standard health declaration passed. Donor declared feeling healthy and free of recent acute illness."
+        : "Recent acute illness in the last 14 days or currently feeling unwell. Temporary clinical deferral applies.",
+      hasConditions,
+      conditions
+    };
+  }, [feelingWell, recentIllness, selectedConditions]);
+
   // Validation per step
   const validateStep = (step) => {
     const errs = {};
     if (step === 1) {
-      if (!fullName.trim()) errs.fullName = "Full name is required";
+      if (!fullName.trim()) errs.fullName = "Full legal name is required";
       if (!phone.trim()) {
-        errs.phone = "Please provide a valid phone number";
-      } else if (phone.length < 10) {
-        errs.phone = "Phone number must be at least 10 digits";
+        errs.phone = "10-digit mobile number is required";
+      } else if (phone.length !== 10) {
+        errs.phone = `Phone number must be exactly 10 digits (${phone.length}/10 entered)`;
+      } else if (!isPhoneVerified) {
+        errs.phone = "Please verify your mobile number with OTP before continuing";
       }
     }
     if (step === 2) {
       if (!bloodGroup) errs.bloodGroup = "Please select a blood group";
+      if (!stateName.trim()) errs.stateName = "State is required";
+      if (!cityName.trim()) errs.cityName = "City is required";
     }
     if (step === 5) {
       if (!consentEmergency) errs.consentEmergency = "Consent to receive emergency requests is required";
@@ -154,8 +516,6 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
   const handleBack = () => {
     setCurrentStep((prev) => Math.max(1, prev - 1));
   };
-
-  const [registeredDonorStatus, setRegisteredDonorStatus] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -190,18 +550,19 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
 
     const isAvailable = donationCycleCompleted && feelingWell && !recentIllness;
     const availabilityStatus = donationCycleCompleted ? (isAvailable ? "AVAILABLE" : "UNAVAILABLE") : "ON_COOLDOWN";
+    const fullLocation = [areaName, cityName, stateName].filter(Boolean).join(", ") || locationName || "Bangalore, Karnataka";
 
     try {
-      // POST to backend /api/donors
       const res = await api.createDonor({
-        full_name: fullName,
-        phone: phone,
-        email: email || null,
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        email: email.trim() || null,
         blood_group: bloodGroup,
         medical_conditions: medicalConditions,
         medicalConditions: medicalConditions,
         latitude: parseFloat(latitude) || 12.9716,
         longitude: parseFloat(longitude) || 77.5946,
+        location_name: fullLocation,
         donation_consent: consentEmergency,
         emergency_contact_consent: consentHospitalShare,
         is_available: isAvailable,
@@ -213,8 +574,13 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
         donation_cycle_completed: donationCycleCompleted,
       });
 
+      const donorData = res?.donor || res?.data || {};
+      const calculatedEligible = donorData.isEligible ?? donorData.eligible ?? donationCycleCompleted;
+      const calculatedReason = donorData.reason || donorData.eligibility_reason || (calculatedEligible ? "Verified eligible" : "Donation cycle not completed");
+
       setRegisteredDonorStatus({
-        isEligible: donationCycleCompleted,
+        isEligible: calculatedEligible,
+        reason: calculatedReason,
         daysRemaining,
         nextEligibilityDate,
         lastDonationDate
@@ -222,7 +588,10 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
 
       setIsSubmitting(false);
       setSubmitSuccess(true);
-      if (onRegistrationSuccess) onRegistrationSuccess();
+
+      if (onRegistrationSuccess) {
+        onRegistrationSuccess();
+      }
     } catch (err) {
       setIsSubmitting(false);
       setServerError(err.message || "Failed to register donor");
@@ -230,7 +599,7 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
   };
 
   return (
-    <div style={{ maxWidth: "760px", margin: "0 auto" }}>
+    <div style={{ maxWidth: "760px", margin: "0 auto", paddingBottom: "40px" }}>
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: "32px" }}>
         <div 
@@ -243,7 +612,7 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
           Donor Registration & Screening
         </h1>
         <p style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
-          Step-by-step consent and medical declaration. Your privacy and autonomy are guaranteed.
+          Step-by-step verified consent and medical declaration. Your privacy and autonomy are guaranteed.
         </p>
       </div>
 
@@ -272,7 +641,7 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
         ))}
       </div>
 
-      {/* Error notification */}
+      {/* Server Error notification */}
       {serverError && (
         <div style={{ background: "rgba(255, 42, 85, 0.15)", border: "1px solid rgba(255, 42, 85, 0.4)", borderRadius: "8px", padding: "12px 16px", color: "#ff4d6d", fontSize: "0.85rem", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
           <AlertCircle size={18} />
@@ -284,8 +653,8 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
       {submitSuccess ? (
         <div className="glass-panel" style={{ textAlign: "center", padding: "40px 24px" }}>
           <div style={{
-            width: "64px",
-            height: "64px",
+            width: "68px",
+            height: "68px",
             borderRadius: "50%",
             background: registeredDonorStatus?.isEligible ? "rgba(16, 185, 129, 0.2)" : "rgba(239, 68, 68, 0.2)",
             border: registeredDonorStatus?.isEligible ? "2px solid #34d399" : "2px solid #f87171",
@@ -293,33 +662,45 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
             alignItems: "center",
             justifyContent: "center",
             margin: "0 auto 16px",
-            color: registeredDonorStatus?.isEligible ? "#34d399" : "#f87171"
+            color: registeredDonorStatus?.isEligible ? "#34d399" : "#f87171",
+            boxShadow: registeredDonorStatus?.isEligible ? "0 0 25px rgba(52, 211, 153, 0.3)" : "0 0 25px rgba(248, 113, 113, 0.3)"
           }}>
-            <CheckCircle2 size={36} />
+            <CheckCircle2 size={38} />
           </div>
 
-          <h2 style={{ fontSize: "1.4rem", fontWeight: "800", marginBottom: "8px" }}>
+          <h2 style={{ fontSize: "1.45rem", fontWeight: "800", marginBottom: "6px" }}>
             Donor Registration Completed!
           </h2>
           <p style={{ color: "#f8fafc", fontSize: "0.95rem", fontWeight: "600", marginBottom: "16px" }}>
-            Welcome to HexaVision, {fullName}!
+            Welcome to HexaVision Emergency Donor Network, {fullName}!
           </p>
 
           <div style={{
-            maxWidth: "420px",
+            maxWidth: "460px",
             margin: "0 auto 20px",
-            padding: "16px",
+            padding: "18px",
             borderRadius: "12px",
             background: registeredDonorStatus?.isEligible ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.1)",
-            border: registeredDonorStatus?.isEligible ? "1px solid rgba(34, 197, 94, 0.3)" : "1px solid rgba(239, 68, 68, 0.3)",
+            border: registeredDonorStatus?.isEligible ? "1px solid rgba(34, 197, 94, 0.35)" : "1px solid rgba(239, 68, 68, 0.35)",
             textAlign: "left",
             fontSize: "0.85rem"
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
               <span style={{ color: "var(--text-muted)" }}>Eligibility Status:</span>
-              <strong style={{ color: registeredDonorStatus?.isEligible ? "#34d399" : "#f87171" }}>
+              <span style={{
+                fontWeight: "800",
+                fontSize: "0.88rem",
+                color: registeredDonorStatus?.isEligible ? "#34d399" : "#f87171"
+              }}>
                 {registeredDonorStatus?.isEligible ? "🟢 ELIGIBLE" : "🔴 NOT ELIGIBLE (COOLDOWN)"}
-              </strong>
+              </span>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+              <span style={{ color: "var(--text-muted)" }}>Eligibility Reason:</span>
+              <span style={{ color: "#f8fafc", fontWeight: "600", textAlign: "right", maxWidth: "260px" }}>
+                {registeredDonorStatus?.reason || (registeredDonorStatus?.isEligible ? "Verified eligible" : "Donation cycle not completed")}
+              </span>
             </div>
 
             {registeredDonorStatus?.lastDonationDate && (
@@ -332,49 +713,66 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
             {registeredDonorStatus?.nextEligibilityDate && (
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
                 <span style={{ color: "var(--text-muted)" }}>Next Eligible Date:</span>
-                <span style={{ color: registeredDonorStatus?.isEligible ? "#34d399" : "#fbbf24" }}>
+                <span style={{ color: registeredDonorStatus?.isEligible ? "#34d399" : "#fbbf24", fontWeight: "700" }}>
                   {formatDate(registeredDonorStatus.nextEligibilityDate)}
                 </span>
               </div>
             )}
 
-            {!registeredDonorStatus?.isEligible && (
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
+            {!registeredDonorStatus?.isEligible && registeredDonorStatus?.daysRemaining > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", paddingTop: "8px", borderTop: "1px dashed rgba(255, 255, 255, 0.1)" }}>
                 <span style={{ color: "var(--text-muted)" }}>Cooldown Remaining:</span>
-                <strong style={{ color: "#f87171" }}>{registeredDonorStatus?.daysRemaining} days</strong>
+                <strong style={{ color: "#f87171" }}>{registeredDonorStatus.daysRemaining} days</strong>
               </div>
             )}
           </div>
 
-          <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", maxWidth: "480px", margin: "0 auto 24px", lineHeight: "1.6" }}>
-            Your registration and explicit consent declarations have been securely recorded into the PostgreSQL database and the regulatory Consent Vault.
+          <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", maxWidth: "480px", margin: "0 auto 24px", lineHeight: "1.6" }}>
+            Your registration, verified phone credentials, and explicit consent declarations have been recorded into the PostgreSQL database and the regulatory Consent Vault.
           </p>
 
-          <button 
-            className="btn btn-emergency"
-            onClick={() => {
-              setSubmitSuccess(false);
-              setCurrentStep(1);
-              setFullName("");
-              setPhone("");
-            }}
-          >
-            Register Another Donor
-          </button>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+            {onNavigateToHome ? (
+              <button 
+                type="button"
+                className="btn btn-emergency"
+                onClick={() => onNavigateToHome()}
+              >
+                <Users size={16} />
+                <span>Back to Home</span>
+              </button>
+            ) : null}
+            <button 
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setSubmitSuccess(false);
+                setCurrentStep(1);
+                setFullName("");
+                setPhone("");
+                setIsPhoneVerified(false);
+                setOtpSent(false);
+                setOtp("");
+              }}
+            >
+              Register Another Donor
+            </button>
+          </div>
         </div>
       ) : (
         /* STEPPER FORM CARD */
         <div className="glass-panel">
-          {/* STEP 1: PERSONAL INFORMATION */}
+          {/* STEP 1: PERSONAL INFORMATION & PHONE OTP */}
           {currentStep === 1 && (
             <div>
               <h3 style={{ fontSize: "1.15rem", fontWeight: "800", marginBottom: "6px" }}>
                 Step 1: Personal Information
               </h3>
               <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "20px" }}>
-                Basic contact and identification details
+                Basic contact and mandatory 10-digit mobile phone OTP verification
               </p>
 
+              {/* Full Legal Name */}
               <div className="form-field">
                 <label className="form-label">Full Legal Name *</label>
                 <input
@@ -383,23 +781,155 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                   placeholder="e.g. Rahul Sharma"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                  required
                 />
                 {errors.fullName && <span className="form-error">{errors.fullName}</span>}
               </div>
 
-              <div className="form-grid-2">
-                <div className="form-field">
-                  <label className="form-label">Phone Number *</label>
-                  <input
-                    type="tel"
-                    className="form-input"
-                    placeholder="+91 98450 XXXXX"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                  {errors.phone && <span className="form-error">{errors.phone}</span>}
+              {/* Phone Number & OTP Verification */}
+              <div className="form-field" style={{ marginTop: "14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <label className="form-label" style={{ margin: 0 }}>Phone Number (10 Digits) *</label>
+                  {isPhoneVerified ? (
+                    <span style={{ fontSize: "0.74rem", color: "#34d399", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <Check size={14} /> Mobile Number Verified
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
+                      {phone.length}/10 digits
+                    </span>
+                  )}
                 </div>
 
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <div style={{ position: "relative", flex: 1 }}>
+                    <span style={{
+                      position: "absolute",
+                      left: "12px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "var(--text-muted)",
+                      fontWeight: "700",
+                      fontSize: "0.88rem"
+                    }}>
+                      +91
+                    </span>
+                    <input
+                      type="tel"
+                      className="form-input"
+                      style={{ paddingLeft: "48px" }}
+                      placeholder="9876543210"
+                      value={phone}
+                      onChange={handlePhoneChange}
+                      maxLength={10}
+                    />
+                  </div>
+
+                  {!isPhoneVerified && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleSendOtp}
+                      disabled={phone.length !== 10 || isSendingOtp || cooldown > 0}
+                      style={{ height: "42px", minWidth: "110px", whiteSpace: "nowrap" }}
+                    >
+                      {isSendingOtp ? (
+                        <RotateCw size={14} className="spin" />
+                      ) : cooldown > 0 ? (
+                        <span>Wait {cooldown}s</span>
+                      ) : (
+                        <>
+                          <KeyRound size={14} />
+                          <span>{otpSent ? "Resend" : "Send OTP"}</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {errors.phone && <span className="form-error">{errors.phone}</span>}
+
+                {/* OTP Verification UI Box */}
+                {otpSent && !isPhoneVerified && (
+                  <div style={{
+                    marginTop: "12px",
+                    padding: "14px 16px",
+                    background: "rgba(0, 242, 254, 0.05)",
+                    border: "1px solid rgba(0, 242, 254, 0.25)",
+                    borderRadius: "10px"
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{ fontSize: "0.8rem", color: "var(--cyan-accent)", fontWeight: "600" }}>
+                        OTP sent to +91 {phone.slice(0, 5)} {phone.slice(5)}
+                      </span>
+                      {devOtpHint && (
+                        <span style={{ fontSize: "0.72rem", background: "rgba(0, 242, 254, 0.15)", padding: "2px 6px", borderRadius: "4px", color: "var(--cyan-accent)", fontFamily: "monospace" }}>
+                          Demo OTP: {devOtpHint}
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Enter 6-digit OTP"
+                        value={otp}
+                        maxLength={6}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        style={{ maxWidth: "180px", letterSpacing: "0.2em", fontWeight: "700" }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-emergency btn-sm"
+                        onClick={handleVerifyOtp}
+                        disabled={isVerifyingOtp || otp.length < 4}
+                        style={{ height: "42px" }}
+                      >
+                        {isVerifyingOtp ? "Verifying..." : "Verify OTP"}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={handleSendOtp}
+                        disabled={cooldown > 0 || isSendingOtp}
+                        style={{ height: "42px" }}
+                      >
+                        {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend OTP"}
+                      </button>
+                    </div>
+
+                    {otpError && (
+                      <div style={{ color: "#ff4d6d", fontSize: "0.78rem", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <AlertCircle size={14} />
+                        <span>{otpError}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isPhoneVerified && (
+                  <div style={{
+                    marginTop: "8px",
+                    padding: "8px 12px",
+                    background: "rgba(16, 185, 129, 0.12)",
+                    border: "1px solid rgba(16, 185, 129, 0.35)",
+                    borderRadius: "8px",
+                    color: "#34d399",
+                    fontSize: "0.8rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
+                  }}>
+                    <CheckCircle2 size={16} />
+                    <span>Mobile number verified for emergency clinical coordination.</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Age and Email */}
+              <div className="form-grid-2" style={{ marginTop: "14px" }}>
                 <div className="form-field">
                   <label className="form-label">Age / Date of Birth</label>
                   <input
@@ -412,31 +942,32 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                     onChange={(e) => setAge(e.target.value)}
                   />
                 </div>
-              </div>
 
-              <div className="form-field">
-                <label className="form-label">Email Address (Optional)</label>
-                <input
-                  type="email"
-                  className="form-input"
-                  placeholder="rahul@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+                <div className="form-field">
+                  <label className="form-label">Email Address (Optional)</label>
+                  <input
+                    type="email"
+                    className="form-input"
+                    placeholder="rahul@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
           )}
 
-          {/* STEP 2: BLOOD & LOCATION */}
+          {/* STEP 2: BLOOD TYPE & GEOGRAPHIC LOCATION */}
           {currentStep === 2 && (
             <div>
               <h3 style={{ fontSize: "1.15rem", fontWeight: "800", marginBottom: "6px" }}>
-                Step 2: Blood Type & Geographic Proximity
+                Step 2: Blood Type & Geographic Location
               </h3>
               <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "20px" }}>
-                Used for geodesic distance and ABO/Rh matching engine
+                Used for geodesic proximity calculation and trauma ABO/Rh matching engine
               </p>
 
+              {/* Blood Group Selection */}
               <div className="form-field">
                 <label className="form-label">Blood Group *</label>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
@@ -450,7 +981,8 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                         borderRadius: "var(--radius-md)",
                         padding: "12px",
                         textAlign: "center",
-                        cursor: "pointer"
+                        cursor: "pointer",
+                        transition: "all 0.2s ease"
                       }}
                     >
                       <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.2rem", fontWeight: "800", color: bloodGroup === bg ? "#ff4d6d" : "#ffffff" }}>
@@ -465,9 +997,10 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                 {errors.bloodGroup && <span className="form-error">{errors.bloodGroup}</span>}
               </div>
 
-              <div className="form-field" style={{ marginTop: "16px" }}>
+              {/* Geographic Hierarchy: State, City, Area */}
+              <div style={{ marginTop: "20px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                  <label className="form-label" style={{ margin: 0 }}>Coordinates & Vicinity</label>
+                  <label className="form-label" style={{ margin: 0 }}>Current Location & GPS *</label>
                   <button 
                     type="button" 
                     className="btn btn-secondary btn-sm"
@@ -475,47 +1008,78 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                     disabled={geoLocating}
                   >
                     <MapPin size={13} color="var(--cyan-accent)" />
-                    {geoLocating ? "Acquiring GPS..." : "Acquire Browser Geolocation"}
+                    <span>{geoLocating ? "Acquiring GPS..." : "Acquire Browser Geolocation"}</span>
                   </button>
                 </div>
-                
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Locality / Neighborhood name"
-                  value={locationName}
-                  onChange={(e) => setLocationName(e.target.value)}
-                />
-              </div>
 
-              <div className="form-grid-2">
-                <div className="form-field">
-                  <label className="form-label">Latitude</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={latitude}
-                    onChange={(e) => setLatitude(e.target.value)}
-                  />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.2fr", gap: "10px", marginBottom: "12px" }}>
+                  <div className="form-field">
+                    <label className="form-label">State *</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Karnataka"
+                      value={stateName}
+                      onChange={(e) => setStateName(e.target.value)}
+                      required
+                    />
+                    {errors.stateName && <span className="form-error">{errors.stateName}</span>}
+                  </div>
+
+                  <div className="form-field">
+                    <label className="form-label">City *</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Bangalore"
+                      value={cityName}
+                      onChange={(e) => setCityName(e.target.value)}
+                      required
+                    />
+                    {errors.cityName && <span className="form-error">{errors.cityName}</span>}
+                  </div>
+
+                  <div className="form-field">
+                    <label className="form-label">Area / Locality</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Indiranagar / Central"
+                      value={areaName}
+                      onChange={(e) => setAreaName(e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div className="form-field">
-                  <label className="form-label">Longitude</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={longitude}
-                    onChange={(e) => setLongitude(e.target.value)}
-                  />
+
+                <div className="form-grid-2">
+                  <div className="form-field">
+                    <label className="form-label">Latitude Coordinates</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={latitude}
+                      onChange={(e) => setLatitude(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">Longitude Coordinates</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={longitude}
+                      onChange={(e) => setLongitude(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* STEP 3: DONATION HISTORY */}
+          {/* STEP 3: DONATION HISTORY & ELIGIBILITY CALCULATION */}
           {currentStep === 3 && (
             <div>
               <h3 style={{ fontSize: "1.15rem", fontWeight: "800", marginBottom: "6px" }}>
-                Step 3: Donation History & Cooldown
+                Step 3: Donation History & Eligibility Cycle
               </h3>
               <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "20px" }}>
                 Medical safety rule: minimum 90-day cooldown interval between whole blood donations
@@ -529,12 +1093,36 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                   value={lastDonationDate}
                   onChange={(e) => setLastDonationDate(e.target.value)}
                 />
-                <span style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: "4px" }}>
-                  Leave empty if you are a first-time donor.
+                <span style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: "4px", display: "block" }}>
+                  Leave empty if this is your very first blood donation.
                 </span>
               </div>
 
-              <div className="form-grid-2">
+              {/* Dynamic Next Eligible Donation Date Preview */}
+              {donationEligibilityPreview && (
+                <div style={{
+                  marginTop: "12px",
+                  padding: "14px",
+                  borderRadius: "10px",
+                  background: donationEligibilityPreview.isEligible ? "rgba(16, 185, 129, 0.08)" : "rgba(251, 191, 36, 0.08)",
+                  border: donationEligibilityPreview.isEligible ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(251, 191, 36, 0.3)",
+                  marginBottom: "16px"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "0.8rem", fontWeight: "700", color: donationEligibilityPreview.isEligible ? "#34d399" : "#fbbf24" }}>
+                      {donationEligibilityPreview.statusText}
+                    </span>
+                    <span style={{ fontSize: "0.76rem", color: "var(--text-muted)" }}>
+                      Next Eligible: <strong style={{ color: "#ffffff" }}>{donationEligibilityPreview.nextEligibleDate === "Ready Now" ? "Ready Now" : formatDate(donationEligibilityPreview.nextEligibleDate)}</strong>
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: 0 }}>
+                    {donationEligibilityPreview.message}
+                  </p>
+                </div>
+              )}
+
+              <div className="form-grid-2" style={{ marginTop: "16px" }}>
                 <div className="form-field">
                   <label className="form-label">Estimated Total Lifetime Donations</label>
                   <input
@@ -574,9 +1162,35 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                   <Lock size={12} /> Confidential & Encrypted
                 </span>
               </div>
-              <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "20px" }}>
-                Required for decision-support pre-screening. Not visible in public donor registry.
+              <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "16px" }}>
+                Required for pre-screening decision support. Declared conditions are reviewed by clinicians and not auto-rejected.
               </p>
+
+              {/* Live Pre-Screening Eligibility Status Banner */}
+              <div style={{
+                padding: "12px 14px",
+                borderRadius: "10px",
+                background: screeningAssessment.isEligible ? "rgba(16, 185, 129, 0.08)" : "rgba(251, 191, 36, 0.08)",
+                border: screeningAssessment.isEligible ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(251, 191, 36, 0.3)",
+                marginBottom: "20px"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <span style={{ fontWeight: "700", fontSize: "0.84rem", color: screeningAssessment.isEligible ? "#34d399" : "#fbbf24" }}>
+                    {screeningAssessment.statusText}
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
+                    Rule: Institutional Protocol v2.4
+                  </span>
+                </div>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: 0 }}>
+                  {screeningAssessment.reason}
+                </p>
+                {screeningAssessment.hasConditions && (
+                  <div style={{ marginTop: "6px", fontSize: "0.74rem", color: "var(--cyan-accent)" }}>
+                    ℹ️ Declared conditions ({screeningAssessment.conditions.join(", ")}): Stored for medical verification. System does not automatically reject.
+                  </div>
+                )}
+              </div>
 
               {/* Medication Toggle */}
               <div className="form-field">
@@ -716,7 +1330,7 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
 
                 {selectedConditions.includes("Other") && (
                   <div style={{ marginTop: "10px" }}>
-                    <label className="form-label" htmlFor="other-health-condition">Other health condition:</label>
+                    <label className="form-label" htmlFor="other-health-condition">Other health condition details:</label>
                     <input
                       id="other-health-condition"
                       type="text"
@@ -784,6 +1398,49 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                 Consent-first emergency coordination protocol. You retain full autonomy at all times.
               </p>
 
+              {/* Registration Summary Card */}
+              <div style={{
+                background: "rgba(11, 20, 38, 0.8)",
+                border: "1px solid var(--border-subtle)",
+                borderRadius: "10px",
+                padding: "14px 16px",
+                marginBottom: "20px"
+              }}>
+                <div style={{ fontSize: "0.76rem", fontWeight: "700", color: "var(--cyan-accent)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" }}>
+                  Registration Overview Summary
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "0.82rem" }}>
+                  <div>
+                    <span style={{ color: "var(--text-muted)" }}>Full Name: </span>
+                    <strong style={{ color: "#ffffff" }}>{fullName}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--text-muted)" }}>Phone (Verified): </span>
+                    <strong style={{ color: "#34d399" }}>+91 {phone} ✓</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--text-muted)" }}>Blood Group: </span>
+                    <strong style={{ color: "#ff4d6d" }}>{bloodGroup}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--text-muted)" }}>Location: </span>
+                    <strong style={{ color: "#ffffff" }}>{cityName}, {stateName}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--text-muted)" }}>Donation Cycle: </span>
+                    <span style={{ color: donationEligibilityPreview?.isEligible ? "#34d399" : "#fbbf24", fontWeight: "700" }}>
+                      {donationEligibilityPreview?.label || "Ready"}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--text-muted)" }}>Screening: </span>
+                    <span style={{ color: screeningAssessment?.isEligible ? "#34d399" : "#fbbf24", fontWeight: "700" }}>
+                      {screeningAssessment?.statusText || "Pre-Screened"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Consent Card 1 */}
               <label className="consent-card">
                 <input
@@ -793,7 +1450,7 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                 />
                 <div>
                   <div style={{ fontWeight: "700", fontSize: "0.88rem", color: "#ffffff" }}>
-                    I consent to receive emergency blood donation requests.
+                    I consent to blood donation and receiving emergency requests. *
                   </div>
                   <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: "2px" }}>
                     Authorizes HexaVision algorithm to calculate proximity and notify you during trauma emergencies.
@@ -811,10 +1468,10 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                 />
                 <div>
                   <div style={{ fontWeight: "700", fontSize: "0.88rem", color: "#ffffff" }}>
-                    I consent to sharing necessary information with authorized hospitals/blood banks.
+                    I consent to sharing necessary information with verified hospitals/blood banks. *
                   </div>
                   <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                    Permits sharing your contact with verified blood-bank officers only after you accept an SOS match.
+                    Permits sharing your verified contact with accredited blood-bank officers only after you accept an SOS match.
                   </div>
                 </div>
               </label>
@@ -829,7 +1486,7 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                 />
                 <div>
                   <div style={{ fontWeight: "700", fontSize: "0.88rem", color: "#ffffff" }}>
-                    I understand that registering does not automatically mean I am medically eligible to donate.
+                    I understand that registering does not automatically mean I am medically eligible to donate. *
                   </div>
                   <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: "2px" }}>
                     Final eligibility, hemoglobin test, cross-matching, and approval must be conducted in person by medical officers.
@@ -873,7 +1530,7 @@ export default function RegisterDonorPage({ onRegistrationSuccess }) {
                 disabled={isSubmitting}
               >
                 <ShieldCheck size={18} />
-                <span>{isSubmitting ? "Submitting to Database..." : "Complete Registration"}</span>
+                <span>{isSubmitting ? "Registering & Recording Consent..." : "Complete Registration"}</span>
               </button>
             )}
           </div>

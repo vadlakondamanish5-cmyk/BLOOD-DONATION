@@ -2,7 +2,7 @@ import axios from "axios";
 
 // Create configured Axios instance
 const axiosInstance = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: import.meta.env.VITE_API_BASE || "http://localhost:5001/api",
   headers: {
     "Content-Type": "application/json"
   },
@@ -84,10 +84,39 @@ export const api = {
   updateBloodUnitTemperature: (id, data) => axiosInstance.patch(`/blood-units/${id}/temperature`, data),
   scanBloodUnit: (id, data = {}) => axiosInstance.post(`/blood-units/${id}/scan`, data),
 
+  // Facilities & Unified Blood Network
+  getFacilities: (params = {}) => axiosInstance.get("/facilities", { params }),
+  getFacilityById: (id) => axiosInstance.get(`/facilities/${id}`),
+  createFacility: (data) => axiosInstance.post("/facilities", data),
+  updateFacility: (id, data) => axiosInstance.put(`/facilities/${id}`, data),
+  verifyFacility: (id, data = {}) => axiosInstance.post(`/facilities/${id}/verify`, data),
+  suspendFacility: (id, data = {}) => axiosInstance.post(`/facilities/${id}/suspend`, data),
+  deboardFacility: (id, data) => axiosInstance.post(`/facilities/${id}/deboard`, data),
+  restoreFacility: (id, data = {}) => axiosInstance.post(`/facilities/${id}/restore`, data),
+  mergeFacilities: (data) => axiosInstance.post("/facilities/merge", data),
+  getFacilityInventory: (id) => axiosInstance.get(`/facilities/${id}/inventory`),
+  getFacilityBloodUnits: (id, params = {}) => axiosInstance.get(`/facilities/${id}/blood-units`, { params }),
+  getNetworkInventorySummary: () => axiosInstance.get("/facilities/summary/inventory"),
+
+  // Audit Logs
+  getAuditLogs: (params = {}) => axiosInstance.get("/audit-logs", { params }),
+  createAuditLog: (data) => axiosInstance.post("/audit-logs", data),
+
   // Auth & Session
   login: (data) => axiosInstance.post("/auth/login", data),
   register: (data) => axiosInstance.post("/auth/register", data),
-  getMe: () => axiosInstance.get("/auth/me")
+  getMe: () => axiosInstance.get("/auth/me"),
+  sendOtp: (phone, is_login = false) => axiosInstance.post("/auth/send-otp", { phone, is_login }),
+  verifyOtp: (phone, otp) => axiosInstance.post("/auth/verify-otp", { phone, otp }),
+  sendEmailOtp: (email) => axiosInstance.post("/auth/send-email-otp", { email }),
+  verifyEmailOtp: (email, otp) => axiosInstance.post("/auth/verify-email-otp", { email, otp }),
+  sendDonorLoginOtp: (phone) => axiosInstance.post("/auth/donor-login-otp", { phone }),
+  verifyDonorLogin: (phone, otp) => axiosInstance.post("/auth/verify-donor-login", { phone, otp }),
+  checkPhone: (phone) => axiosInstance.get(`/auth/check-phone/${phone}`),
+
+  // Blood Knowledge AI Chatbot
+  askBloodKnowledge: (message, history = []) =>
+    axiosInstance.post("/chat", { message, history })
 };
 
 export default axiosInstance;

@@ -1,10 +1,24 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
-import { ArrowRight, ShieldCheck, Activity, Bot, User, Lock, Sparkles, LogIn, KeyRound } from "lucide-react";
+import {
+  ArrowRight,
+  ShieldCheck,
+  Activity,
+  Bot,
+  User,
+  Lock,
+  Sparkles,
+  LogIn,
+  KeyRound,
+  UserPlus,
+  Building2,
+  HeartHandshake
+} from "lucide-react";
 import BloodDropIcon from "./components/BloodDropIcon";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import CustomMedicalCursor from "./components/CustomMedicalCursor";
 import { api } from "./api/api";
+import { useRouter, navigate } from "./utils/router";
 
 // Lazy-loaded pages for bundle optimization & code splitting
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
@@ -16,12 +30,23 @@ const LiveMapPage = lazy(() => import("./pages/LiveMapPage"));
 const BloodTrackingPage = lazy(() => import("./pages/BloodTrackingPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 const ConsentVaultPage = lazy(() => import("./pages/ConsentVaultPage"));
+const FacilityDirectoryPage = lazy(() => import("./pages/FacilityDirectoryPage"));
+const FacilityDetailPage = lazy(() => import("./pages/FacilityDetailPage"));
+const BloodInventoryPage = lazy(() => import("./pages/BloodInventoryPage"));
+const AuditLogsPage = lazy(() => import("./pages/AuditLogsPage"));
+
+// Dedicated Role Portals & Auth Pages
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const RegisterPage = lazy(() => import("./pages/RegisterPage"));
+const DonorPortal = lazy(() => import("./pages/donor/DonorPortal"));
+const HospitalPortal = lazy(() => import("./pages/hospital/HospitalPortal"));
 
 // Lazy-loaded modals
 const SOSModal = lazy(() => import("./components/SOSModal"));
 const NewRequestModal = lazy(() => import("./components/NewRequestModal"));
 const HospitalBloodStockModal = lazy(() => import("./components/HospitalBloodStockModal"));
 const AuthModal = lazy(() => import("./components/AuthModal"));
+const BloodKnowledgeAI = lazy(() => import("./components/BloodKnowledgeAI"));
 
 function PageLoader() {
   return (
@@ -56,8 +81,6 @@ function PageLoader() {
 
 export default function App() {
   const [activePage, setActivePage] = useState("dashboard");
-  const [showLanding, setShowLanding] = useState(true);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
@@ -68,7 +91,7 @@ export default function App() {
   const pointerRef = useRef({ x: 50, y: 50 });
   const rafRef = useRef(null);
 
-  // Authentication & AI State
+  // Authentication State
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem("hexavision_auth_user");
@@ -77,16 +100,22 @@ export default function App() {
       return null;
     }
   });
+
   const [aiActive, setAiActive] = useState(() => {
     return Boolean(localStorage.getItem("hexavision_session_token"));
   });
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // URL Router with strict role guards
+  const { path } = useRouter(user);
 
   // Modals
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSOSModalOpen, setIsSOSModalOpen] = useState(false);
   const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
   const [isHospitalStockModalOpen, setIsHospitalStockModalOpen] = useState(false);
   const [selectedRequestIdForMatch, setSelectedRequestIdForMatch] = useState(null);
+  const [selectedFacilityId, setSelectedFacilityId] = useState(null);
+  const [isKnowledgeModalOpen, setIsKnowledgeModalOpen] = useState(false);
 
   const loadData = async () => {
     try {
@@ -112,7 +141,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Validate existing session token on mount
+  // Validate existing session token on mount & sync user role
   useEffect(() => {
     const token = localStorage.getItem("hexavision_session_token");
     if (token) {
@@ -120,6 +149,7 @@ export default function App() {
         .then((res) => {
           if (res?.success && res.user) {
             setUser(res.user);
+            localStorage.setItem("hexavision_auth_user", JSON.stringify(res.user));
             setAiActive(true);
           }
         })
@@ -132,15 +162,13 @@ export default function App() {
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const updateMotionPreference = () => setReducedMotion(mediaQuery.matches);
-
     updateMotionPreference();
     mediaQuery.addEventListener?.("change", updateMotionPreference);
-
     return () => mediaQuery.removeEventListener?.("change", updateMotionPreference);
   }, []);
 
   useEffect(() => {
-    if (!showLanding) return undefined;
+    if (path !== "/") return undefined;
 
     const handlePointerMove = (event) => {
       pointerRef.current = {
@@ -157,12 +185,11 @@ export default function App() {
     };
 
     window.addEventListener("pointermove", handlePointerMove);
-
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [showLanding]);
+  }, [path]);
 
   const criticalCount = parseInt(stats?.requests?.critical_active_requests || 0, 10);
 
@@ -177,47 +204,84 @@ export default function App() {
     setActivePage("dashboard");
   };
 
-  const enterDashboardDirectly = () => {
-    if (!showLanding) return;
-    setIsTransitioning(true);
-    setTimeout(() => {
-      setShowLanding(false);
-      setActivePage("dashboard");
-      setIsTransitioning(false);
-    }, 560);
-  };
-
-  const handleEnterDashboard = () => {
-    if (!user) {
-      // If user hasn't registered or logged in yet, prompt the clinical auth modal
-      setIsAuthModalOpen(true);
-    } else {
-      enterDashboardDirectly();
-    }
-  };
-
-  const handleAuthSuccess = (authedUser) => {
+  // Automatic role-based navigation after login or registration
+  const handleAuthSuccess = (authedUser, token) => {
     setUser(authedUser);
     setAiActive(true);
     setIsAuthModalOpen(false);
-    if (showLanding) {
-      enterDashboardDirectly();
+
+    const role = String(authedUser?.role || "").toLowerCase();
+    if (role === "donor") {
+      navigate("/donor/dashboard");
+    } else if (role === "hospital") {
+      navigate("/hospital/dashboard");
+    } else {
+      navigate("/admin/dashboard");
     }
   };
 
   const handleSignOut = () => {
     localStorage.removeItem("hexavision_auth_user");
     localStorage.removeItem("hexavision_session_token");
+    localStorage.removeItem("hexavision_account_type");
     setUser(null);
     setAiActive(false);
+    navigate("/login");
   };
 
-  if (showLanding) {
+  // ====================================================
+  // ROUTE 1: DEDICATED LOGIN PAGE (/login)
+  // ====================================================
+  if (path === "/login") {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <LoginPage onAuthSuccess={handleAuthSuccess} />
+      </Suspense>
+    );
+  }
+
+  // ====================================================
+  // ROUTE 2: DEDICATED REGISTRATION PAGE (/register)
+  // ====================================================
+  if (path === "/register") {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <RegisterPage onAuthSuccess={handleAuthSuccess} />
+      </Suspense>
+    );
+  }
+
+  // ====================================================
+  // ROUTE 3: DEDICATED DONOR PORTAL (/donor/*)
+  // ====================================================
+  if (path.startsWith("/donor") || (user && String(user.role).toLowerCase() === "donor" && path !== "/")) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <DonorPortal user={user} onSignOut={handleSignOut} />
+      </Suspense>
+    );
+  }
+
+  // ====================================================
+  // ROUTE 4: DEDICATED HOSPITAL PORTAL (/hospital/*)
+  // ====================================================
+  if (path.startsWith("/hospital") || (user && String(user.role).toLowerCase() === "hospital" && path !== "/")) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <HospitalPortal user={user} onSignOut={handleSignOut} />
+      </Suspense>
+    );
+  }
+
+  // ====================================================
+  // ROUTE 5: LANDING PAGE (Unauthenticated Root /)
+  // ====================================================
+  if (!user && path === "/") {
     return (
       <>
-        <CustomMedicalCursor active={showLanding} reducedMotion={reducedMotion} />
+        <CustomMedicalCursor active={!isAuthModalOpen} reducedMotion={reducedMotion} />
         <div
-          className={`landing-shell ${isTransitioning ? "landing-shell-exit" : ""}`}
+          className="landing-shell"
           style={{
             "--mouse-x": `${landingPointer.x}%`,
             "--mouse-y": `${landingPointer.y}%`
@@ -225,12 +289,7 @@ export default function App() {
         >
           <div className="landing-grid">
             <div className="landing-copy">
-              <button
-                type="button"
-                className="landing-logo-button"
-                onClick={handleEnterDashboard}
-                aria-label="Open HexaVision dashboard"
-              >
+              <div className="landing-logo-button">
                 <span className="brand-hexagon logo-blood-pulse landing-logo-mark" aria-hidden="true">
                   <BloodDropIcon size={26} color="#ffffff" variant="filled" animated />
                 </span>
@@ -238,7 +297,7 @@ export default function App() {
                   <span className="brand-name">HEXAVISION</span>
                   <span className="brand-sub landing-tagline">Smart Blood Matching & Emergency Coordination</span>
                 </span>
-              </button>
+              </div>
 
               <div className="landing-badge">
                 <Activity size={14} />
@@ -252,61 +311,53 @@ export default function App() {
                 and secure donor visibility.
               </p>
 
-              {/* Active Session indicator if user is already logged in */}
-              {user ? (
-                <div style={{
-                  background: "rgba(0, 242, 254, 0.08)",
-                  border: "1px solid rgba(0, 242, 254, 0.3)",
-                  borderRadius: "10px",
-                  padding: "10px 14px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  maxWidth: "460px",
-                  marginBottom: "8px"
-                }}>
-                  <ShieldCheck size={18} color="var(--cyan-accent)" />
-                  <div style={{ fontSize: "0.82rem" }}>
-                    <span style={{ color: "var(--text-muted)" }}>Authorized Session: </span>
-                    <strong style={{ color: "var(--text-primary)" }}>{user.full_name}</strong>
-                    <span style={{ color: "var(--text-muted)" }}> ({user.organization || "Apollo Hospitals"})</span>
-                  </div>
-                </div>
-              ) : null}
-
               <div className="landing-actions">
-                {user ? (
-                  <button type="button" className="btn btn-emergency" onClick={enterDashboardDirectly}>
-                    <span>Enter Command Center</span>
-                    <ArrowRight size={16} />
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      className="btn btn-emergency"
-                      onClick={() => setIsAuthModalOpen(true)}
-                    >
-                      <KeyRound size={16} />
-                      <span>Registration / Login</span>
-                      <ArrowRight size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setIsAuthModalOpen(true)}
-                      style={{ borderColor: "rgba(0, 242, 254, 0.4)" }}
-                    >
-                      <Bot size={16} color="var(--cyan-accent)" />
-                      <span>Activate AI</span>
-                    </button>
-                  </>
-                )}
+                <button
+                  type="button"
+                  id="btn-landing-login"
+                  className="btn btn-emergency"
+                  onClick={() => navigate("/login")}
+                >
+                  <KeyRound size={16} />
+                  <span>Sign In / Login</span>
+                  <ArrowRight size={16} />
+                </button>
+
+                <button
+                  type="button"
+                  id="btn-landing-register"
+                  className="btn btn-secondary"
+                  onClick={() => navigate("/register")}
+                  style={{ borderColor: "rgba(0, 242, 254, 0.4)" }}
+                >
+                  <UserPlus size={16} color="var(--cyan-accent)" />
+                  <span>Register Account</span>
+                </button>
 
                 <div className="landing-proof">
                   <ShieldCheck size={16} />
-                  Secure donor coordination
+                  Role-based hospital & donor access
                 </div>
+              </div>
+
+              {/* Blood Knowledge AI Landing Showcase */}
+              <div className="blood-knowledge-entry-card">
+                <div className="knowledge-card-header">
+                  <span className="knowledge-icon-badge" role="img" aria-label="blood drop">🩸</span>
+                  <div>
+                    <div className="knowledge-title">Blood Knowledge AI</div>
+                    <div className="knowledge-tagline">"Learn about blood, donation and blood safety"</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  id="btn-open-knowledge-ai"
+                  className="btn-knowledge-ask"
+                  onClick={() => setIsKnowledgeModalOpen(true)}
+                >
+                  <Sparkles size={16} />
+                  <span>Ask Blood Knowledge AI</span>
+                </button>
               </div>
             </div>
 
@@ -341,12 +392,21 @@ export default function App() {
             isOpen={isAuthModalOpen}
             onClose={() => setIsAuthModalOpen(false)}
             onAuthSuccess={handleAuthSuccess}
+            onNavigateToDonorRegister={() => navigate("/register")}
+          />
+          <BloodKnowledgeAI
+            isOpen={isKnowledgeModalOpen}
+            onClose={() => setIsKnowledgeModalOpen(false)}
           />
         </Suspense>
       </>
     );
   }
 
+  // ====================================================
+  // ROUTE 6: ADMIN COMMAND CENTER (/admin/*)
+  // Preserves existing full admin / command center capabilities
+  // ====================================================
   return (
     <div className="app-shell">
       <Sidebar
@@ -355,6 +415,7 @@ export default function App() {
         isMobileOpen={isMobileOpen}
         setIsMobileOpen={setIsMobileOpen}
         criticalCount={criticalCount}
+        user={user}
       />
 
       <div className="main-shell">
@@ -410,6 +471,7 @@ export default function App() {
                   loadData();
                   setActivePage("donors");
                 }}
+                onNavigateToHome={() => setActivePage("dashboard")}
               />
             )}
 
@@ -435,6 +497,36 @@ export default function App() {
 
             {activePage === "consent" && (
               <ConsentVaultPage />
+            )}
+
+            {activePage === "facilities" && (
+              <FacilityDirectoryPage
+                onSelectFacility={(id) => {
+                  setSelectedFacilityId(id);
+                  setActivePage("facility-detail");
+                }}
+              />
+            )}
+
+            {activePage === "facility-detail" && (
+              <FacilityDetailPage
+                facilityId={selectedFacilityId}
+                onBack={() => setActivePage("facilities")}
+              />
+            )}
+
+            {activePage === "inventory" && (
+              <BloodInventoryPage
+                onSelectFacility={(id) => {
+                  setSelectedFacilityId(id);
+                  setActivePage("facility-detail");
+                }}
+                onNavigateToDirectory={() => setActivePage("facilities")}
+              />
+            )}
+
+            {activePage === "audit-logs" && (
+              <AuditLogsPage />
             )}
           </Suspense>
         </main>
@@ -463,6 +555,12 @@ export default function App() {
           isOpen={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
           onAuthSuccess={handleAuthSuccess}
+          onNavigateToDonorRegister={() => navigate("/register")}
+        />
+
+        <BloodKnowledgeAI
+          isOpen={isKnowledgeModalOpen}
+          onClose={() => setIsKnowledgeModalOpen(false)}
         />
       </Suspense>
     </div>

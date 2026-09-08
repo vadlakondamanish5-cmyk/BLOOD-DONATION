@@ -17,8 +17,13 @@ import {
   Sparkles,
   UserCheck,
   Users,
+  Target,
   X,
-  Bot
+  Bot,
+  Building2,
+  Truck,
+  FileText,
+  ArrowRight
 } from "lucide-react";
 import { api } from "../api/api";
 import BloodFlowMap from "../components/BloodFlowMap";
@@ -588,6 +593,535 @@ export default function DashboardPage({
     <div className="command-dashboard-shell">
       <div className="command-dashboard">
         <section className="command-stage">
+          {/* HEXAVISION — UNIFIED BLOOD NETWORK COMMAND BOARD HERO */}
+          <div style={{
+            background: "linear-gradient(135deg, rgba(18, 22, 36, 0.92) 0%, rgba(10, 14, 26, 0.98) 100%)",
+            border: "1px solid rgba(0, 242, 254, 0.25)",
+            borderRadius: "14px",
+            padding: "20px 24px",
+            marginBottom: "16px",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.35)",
+            position: "relative",
+            overflow: "hidden"
+          }}>
+            {/* Ambient background glow */}
+            <div style={{
+              position: "absolute",
+              top: "-50px",
+              right: "-50px",
+              width: "200px",
+              height: "200px",
+              background: "radial-gradient(circle, rgba(0, 242, 254, 0.12) 0%, transparent 70%)",
+              pointerEvents: "none"
+            }} />
+
+            {/* Top Bar: Title & Demo Banner */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                  <span style={{ 
+                    fontSize: "0.72rem", 
+                    fontWeight: "800", 
+                    letterSpacing: "0.1em", 
+                    textTransform: "uppercase", 
+                    padding: "3px 8px", 
+                    borderRadius: "4px", 
+                    background: "rgba(0, 242, 254, 0.15)", 
+                    color: "var(--cyan-accent)",
+                    border: "1px solid rgba(0, 242, 254, 0.3)" 
+                  }}>
+                    COMMAND BOARD
+                  </span>
+                  <span style={{ fontSize: "0.76rem", color: "var(--text-dim)" }}>
+                    HYDERABAD DIVISION • TELANGANA
+                  </span>
+                </div>
+                <h2 style={{ 
+                  margin: "0 0 2px 0", 
+                  fontSize: "1.55rem", 
+                  fontWeight: "800", 
+                  letterSpacing: "-0.02em", 
+                  color: "#fff" 
+                }}>
+                  HEXAVISION — UNIFIED BLOOD NETWORK
+                </h2>
+                <div style={{ 
+                  fontSize: "0.82rem", 
+                  fontWeight: "600", 
+                  color: "var(--cyan-accent)", 
+                  letterSpacing: "0.05em" 
+                }}>
+                  REAL-TIME BLOOD AVAILABILITY & LOGISTICS NETWORK
+                </div>
+              </div>
+
+              {/* DEMO ENVIRONMENT BANNER */}
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                background: "rgba(255, 170, 0, 0.1)",
+                border: "1px solid rgba(255, 170, 0, 0.3)",
+                padding: "6px 14px",
+                borderRadius: "20px",
+                fontSize: "0.76rem",
+                color: "#ffaa00",
+                fontWeight: "600"
+              }}>
+                <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#ffaa00", boxShadow: "0 0 6px #ffaa00" }} />
+                <span>DEMO ENVIRONMENT: Data displayed is simulated for operational validation</span>
+              </div>
+            </div>
+
+            {/* ==================================================== */}
+            {/* CORE 5-STEP EMERGENCY BLOOD WORKFLOW                */}
+            {/* STEP 1 → STEP 2 → STEP 3 → STEP 4 → STEP 5          */}
+            {/* ==================================================== */}
+            <div style={{
+              background: "rgba(11, 15, 25, 0.75)",
+              border: "1px solid rgba(0, 242, 254, 0.3)",
+              borderRadius: "14px",
+              padding: "18px 20px",
+              marginTop: "16px",
+              marginBottom: "18px",
+              boxShadow: "0 8px 30px rgba(0, 0, 0, 0.45)"
+            }}>
+              {/* Header with Title and Sequential Flow Pills */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+                    <span style={{
+                      fontSize: "0.72rem",
+                      fontWeight: "900",
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      padding: "3px 10px",
+                      borderRadius: "4px",
+                      background: "linear-gradient(90deg, #ff2a55, #ff7e40)",
+                      color: "#ffffff",
+                      boxShadow: "0 0 10px rgba(255, 42, 85, 0.4)"
+                    }}>
+                      MAIN WORKFLOW
+                    </span>
+                    <h3 style={{ margin: 0, fontSize: "1.12rem", fontWeight: "800", color: "#ffffff", letterSpacing: "0.02em" }}>
+                      5-STEP EMERGENCY BLOOD COORDINATION PIPELINE
+                    </h3>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                    Click any step below to launch and manage live operations (Step 1 → Step 2 → Step 3 → Step 4 → Step 5).
+                  </p>
+                </div>
+
+                {/* Sequential progress indicator */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "5px 14px",
+                  borderRadius: "20px",
+                  background: "rgba(0, 242, 254, 0.06)",
+                  border: "1px solid rgba(0, 242, 254, 0.25)",
+                  fontSize: "0.74rem",
+                  fontWeight: "700"
+                }}>
+                  <span style={{ color: "#ff4d6d" }}>1. Donors</span>
+                  <span style={{ color: "rgba(255,255,255,0.25)" }}>→</span>
+                  <span style={{ color: "#00f2fe" }}>2. Hospitals</span>
+                  <span style={{ color: "rgba(255,255,255,0.25)" }}>→</span>
+                  <span style={{ color: "#fbbf24" }}>3. Requests</span>
+                  <span style={{ color: "rgba(255,255,255,0.25)" }}>→</span>
+                  <span style={{ color: "#c084fc" }}>4. Matching</span>
+                  <span style={{ color: "rgba(255,255,255,0.25)" }}>→</span>
+                  <span style={{ color: "#34d399" }}>5. Tracking</span>
+                </div>
+              </div>
+
+              {/* 5 Clickable Step Cards */}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+                gap: "12px"
+              }}>
+                {/* STEP 1: DONOR REGISTRATION */}
+                <div
+                  id="admin-step-1-donor-registration"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onNavigate("donors")}
+                  onKeyDown={(e) => e.key === "Enter" && onNavigate("donors")}
+                  style={{
+                    background: "rgba(255, 42, 85, 0.05)",
+                    border: "1px solid rgba(255, 42, 85, 0.25)",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    cursor: "pointer",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    transition: "all 0.2s ease"
+                  }}
+                  className="command-hero-card"
+                >
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{
+                        fontSize: "0.68rem",
+                        fontWeight: "900",
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        background: "rgba(255, 42, 85, 0.18)",
+                        color: "#ff4d6d",
+                        border: "1px solid rgba(255, 42, 85, 0.35)",
+                        letterSpacing: "0.08em"
+                      }}>
+                        STEP 1
+                      </span>
+                      <Users size={18} color="#ff4d6d" />
+                    </div>
+                    <h4 style={{ margin: "0 0 6px 0", fontSize: "0.92rem", fontWeight: "800", color: "#ffffff", letterSpacing: "0.01em" }}>
+                      DONOR REGISTRATION
+                    </h4>
+                    <p style={{ margin: 0, fontSize: "0.74rem", color: "var(--text-muted)", lineHeight: 1.45 }}>
+                      View and manage registered blood donors, their blood groups, location, availability status, consent and donor details.
+                    </p>
+                  </div>
+                  <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.76rem", fontWeight: "700", color: "#ff4d6d" }}>
+                      {donorList.length || stats?.totalDonors || 1007} Donors
+                    </span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--cyan-accent)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
+                      Manage Donors <ArrowRight size={13} />
+                    </span>
+                  </div>
+                </div>
+
+                {/* STEP 2: HOSPITAL REGISTRATION */}
+                <div
+                  id="admin-step-2-hospital-registration"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onNavigate("facilities")}
+                  onKeyDown={(e) => e.key === "Enter" && onNavigate("facilities")}
+                  style={{
+                    background: "rgba(0, 242, 254, 0.05)",
+                    border: "1px solid rgba(0, 242, 254, 0.25)",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    cursor: "pointer",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    transition: "all 0.2s ease"
+                  }}
+                  className="command-hero-card"
+                >
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{
+                        fontSize: "0.68rem",
+                        fontWeight: "900",
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        background: "rgba(0, 242, 254, 0.18)",
+                        color: "var(--cyan-accent)",
+                        border: "1px solid rgba(0, 242, 254, 0.35)",
+                        letterSpacing: "0.08em"
+                      }}>
+                        STEP 2
+                      </span>
+                      <Building2 size={18} color="var(--cyan-accent)" />
+                    </div>
+                    <h4 style={{ margin: "0 0 6px 0", fontSize: "0.92rem", fontWeight: "800", color: "#ffffff", letterSpacing: "0.01em" }}>
+                      HOSPITAL REGISTRATION
+                    </h4>
+                    <p style={{ margin: 0, fontSize: "0.74rem", color: "var(--text-muted)", lineHeight: 1.45 }}>
+                      View and manage registered hospitals/blood banks and their details.
+                    </p>
+                  </div>
+                  <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.76rem", fontWeight: "700", color: "var(--cyan-accent)" }}>
+                      {hospitalStock.length || 10} Facilities
+                    </span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--cyan-accent)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
+                      Directory <ArrowRight size={13} />
+                    </span>
+                  </div>
+                </div>
+
+                {/* STEP 3: BLOOD REQUEST */}
+                <div
+                  id="admin-step-3-blood-request"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onNavigate("requests")}
+                  onKeyDown={(e) => e.key === "Enter" && onNavigate("requests")}
+                  style={{
+                    background: "rgba(251, 191, 36, 0.05)",
+                    border: "1px solid rgba(251, 191, 36, 0.25)",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    cursor: "pointer",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    transition: "all 0.2s ease"
+                  }}
+                  className="command-hero-card"
+                >
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{
+                        fontSize: "0.68rem",
+                        fontWeight: "900",
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        background: "rgba(251, 191, 36, 0.18)",
+                        color: "#fbbf24",
+                        border: "1px solid rgba(251, 191, 36, 0.35)",
+                        letterSpacing: "0.08em"
+                      }}>
+                        STEP 3
+                      </span>
+                      <Radio size={18} color="#fbbf24" />
+                    </div>
+                    <h4 style={{ margin: "0 0 6px 0", fontSize: "0.92rem", fontWeight: "800", color: "#ffffff", letterSpacing: "0.01em" }}>
+                      BLOOD REQUEST
+                    </h4>
+                    <p style={{ margin: 0, fontSize: "0.74rem", color: "var(--text-muted)", lineHeight: 1.45 }}>
+                      View, manage and process emergency blood requests raised by hospitals.
+                    </p>
+                  </div>
+                  <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.76rem", fontWeight: "700", color: "#fbbf24" }}>
+                      {requestList.length} Requests
+                    </span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--cyan-accent)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
+                      Process <ArrowRight size={13} />
+                    </span>
+                  </div>
+                </div>
+
+                {/* STEP 4: DONOR MATCHING */}
+                <div
+                  id="admin-step-4-donor-matching"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onNavigate("matches")}
+                  onKeyDown={(e) => e.key === "Enter" && onNavigate("matches")}
+                  style={{
+                    background: "rgba(192, 132, 252, 0.05)",
+                    border: "1px solid rgba(192, 132, 252, 0.25)",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    cursor: "pointer",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    transition: "all 0.2s ease"
+                  }}
+                  className="command-hero-card"
+                >
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{
+                        fontSize: "0.68rem",
+                        fontWeight: "900",
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        background: "rgba(192, 132, 252, 0.18)",
+                        color: "#c084fc",
+                        border: "1px solid rgba(192, 132, 252, 0.35)",
+                        letterSpacing: "0.08em"
+                      }}>
+                        STEP 4
+                      </span>
+                      <Target size={18} color="#c084fc" />
+                    </div>
+                    <h4 style={{ margin: "0 0 6px 0", fontSize: "0.92rem", fontWeight: "800", color: "#ffffff", letterSpacing: "0.01em" }}>
+                      DONOR MATCHING
+                    </h4>
+                    <p style={{ margin: 0, fontSize: "0.74rem", color: "var(--text-muted)", lineHeight: 1.45 }}>
+                      Match emergency blood requests with suitable available donors based on blood group, location, availability and other existing matching logic.
+                    </p>
+                  </div>
+                  <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.76rem", fontWeight: "700", color: "#c084fc" }}>
+                      AI Multi-Factor
+                    </span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--cyan-accent)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
+                      Match Inspector <ArrowRight size={13} />
+                    </span>
+                  </div>
+                </div>
+
+                {/* STEP 5: EMERGENCY RESPONSE / TRACKING */}
+                <div
+                  id="admin-step-5-emergency-tracking"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onNavigate("tracking")}
+                  onKeyDown={(e) => e.key === "Enter" && onNavigate("tracking")}
+                  style={{
+                    background: "rgba(52, 211, 153, 0.05)",
+                    border: "1px solid rgba(52, 211, 153, 0.25)",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    cursor: "pointer",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    transition: "all 0.2s ease"
+                  }}
+                  className="command-hero-card"
+                >
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{
+                        fontSize: "0.68rem",
+                        fontWeight: "900",
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        background: "rgba(52, 211, 153, 0.18)",
+                        color: "#34d399",
+                        border: "1px solid rgba(52, 211, 153, 0.35)",
+                        letterSpacing: "0.08em"
+                      }}>
+                        STEP 5
+                      </span>
+                      <Truck size={18} color="#34d399" />
+                    </div>
+                    <h4 style={{ margin: "0 0 6px 0", fontSize: "0.92rem", fontWeight: "800", color: "#ffffff", letterSpacing: "0.01em" }}>
+                      EMERGENCY RESPONSE / TRACKING
+                    </h4>
+                    <p style={{ margin: 0, fontSize: "0.74rem", color: "var(--text-muted)", lineHeight: 1.45 }}>
+                      Monitor the emergency request, donor response, hospital status and delivery/response tracking until the request is completed.
+                    </p>
+                  </div>
+                  <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.76rem", fontWeight: "700", color: "#34d399" }}>
+                      Live GPS / Transit
+                    </span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--cyan-accent)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
+                      Track Dispatch <ArrowRight size={13} />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 4 Network Quick Command Cards */}
+            <div style={{ 
+              display: "grid", 
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", 
+              gap: "12px", 
+              marginTop: "16px" 
+            }}>
+              {/* Card 1: Facilities Directory */}
+              <div 
+                onClick={() => onNavigate("facilities")}
+                style={{
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "10px",
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                className="command-hero-card"
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: "600", textTransform: "uppercase" }}>Clinical Facilities</span>
+                  <Building2 size={16} style={{ color: "var(--cyan-accent)" }} />
+                </div>
+                <div style={{ fontSize: "1.45rem", fontWeight: "800", color: "#fff" }}>
+                  113 Active
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: "2px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>35 Blood Banks • 75+ Hospitals</span>
+                  <ArrowRight size={12} style={{ color: "var(--cyan-accent)" }} />
+                </div>
+              </div>
+
+              {/* Card 2: Consolidated Blood Units */}
+              <div 
+                onClick={() => onNavigate("inventory")}
+                style={{
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "10px",
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                className="command-hero-card"
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: "600", textTransform: "uppercase" }}>Consolidated Units</span>
+                  <Droplet size={16} style={{ color: "#ff2a55" }} />
+                </div>
+                <div style={{ fontSize: "1.45rem", fontWeight: "800", color: "#38ef7d" }}>
+                  65,800+
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: "2px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>8 Groups • 4 Components</span>
+                  <ArrowRight size={12} style={{ color: "#38ef7d" }} />
+                </div>
+              </div>
+
+              {/* Card 3: Cold-Chain Tracking */}
+              <div 
+                onClick={() => onNavigate("tracking")}
+                style={{
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "10px",
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                className="command-hero-card"
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: "600", textTransform: "uppercase" }}>Cold Chain Units</span>
+                  <Truck size={16} style={{ color: "#00f2fe" }} />
+                </div>
+                <div style={{ fontSize: "1.45rem", fontWeight: "800", color: "var(--cyan-accent)" }}>
+                  350+ Tracked
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: "2px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Live GPS & Sensor Telemetry</span>
+                  <ArrowRight size={12} style={{ color: "var(--cyan-accent)" }} />
+                </div>
+              </div>
+
+              {/* Card 4: Governance & Audit Trail */}
+              <div 
+                onClick={() => onNavigate("audit-logs")}
+                style={{
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "10px",
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                className="command-hero-card"
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: "600", textTransform: "uppercase" }}>Audit & Deboarding</span>
+                  <FileText size={16} style={{ color: "#c084fc" }} />
+                </div>
+                <div style={{ fontSize: "1.45rem", fontWeight: "800", color: "#c084fc" }}>
+                  Immutable
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: "2px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Soft-Delete & Restore Protocol</span>
+                  <ArrowRight size={12} style={{ color: "#c084fc" }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Emergency Blood AI Status & Operational Command Banner */}
           <div className="ai-command-banner">
             <div className="ai-banner-left">

@@ -119,6 +119,18 @@ exports.createRequest = async (req, res) => {
             });
         }
 
+        // Check if facility is deboarded
+        const facCheck = await pool.query(
+            "SELECT operating_status, is_active FROM facilities WHERE facility_name = $1 LIMIT 1",
+            [hospital.hospital_name]
+        );
+        if (facCheck.rows.length > 0 && (facCheck.rows[0].operating_status === 'DEBOARDED' || !facCheck.rows[0].is_active)) {
+            return res.status(403).json({
+                success: false,
+                message: "Facility is currently deboarded from the network and cannot create blood requests."
+            });
+        }
+
         // Fall back to hospital coordinates if not explicitly supplied in request
         if (reqLat === null || reqLon === null) {
             reqLat = parseFloat(hospital.latitude);

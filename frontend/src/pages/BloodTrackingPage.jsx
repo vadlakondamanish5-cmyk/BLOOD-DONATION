@@ -120,7 +120,7 @@ export default function BloodTrackingPage() {
     fetchTrackingData();
 
     try {
-      const socketUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+      const socketUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001";
       const socket = io(socketUrl, {
         transports: ["websocket", "polling"],
         reconnection: true,

@@ -64,6 +64,24 @@ export default function Header({
           </span>
           <span className="ai-status-pulse" />
         </div>
+
+        {/* Demo Environment Badge */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          padding: "4px 10px",
+          borderRadius: "20px",
+          background: "rgba(255, 170, 0, 0.12)",
+          border: "1px solid rgba(255, 170, 0, 0.35)",
+          color: "#ffaa00",
+          fontSize: "0.72rem",
+          fontWeight: "700",
+          letterSpacing: "0.04em"
+        }} title="Data displayed is simulated for operational validation">
+          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ffaa00", boxShadow: "0 0 6px #ffaa00" }} />
+          <span>DEMO ENVIRONMENT</span>
+        </div>
       </div>
 
       <div className="header-right">

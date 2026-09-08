@@ -67,6 +67,31 @@ exports.getDashboardStats = async (req, res) => {
             SELECT COUNT(*) AS total_hospitals FROM hospitals
         `);
 
+        // Facilities Breakdown
+        const facilitiesRes = await pool.query(`
+            SELECT 
+                COUNT(*) AS total_facilities,
+                COUNT(*) FILTER (WHERE is_active = TRUE AND operating_status != 'DEBOARDED') AS active_facilities,
+                COUNT(*) FILTER (WHERE operating_status = 'DEBOARDED') AS deboarded_facilities,
+                COUNT(*) FILTER (WHERE facility_type IN ('GOVERNMENT_BLOOD_BANK', 'PRIVATE_BLOOD_BANK')) AS blood_banks,
+                COUNT(*) FILTER (WHERE facility_type IN ('GOVERNMENT_HOSPITAL', 'PRIVATE_HOSPITAL', 'MEDICAL_COLLEGE_HOSPITAL')) AS hospital_centres,
+                COUNT(*) FILTER (WHERE facility_type = 'BLOOD_STORAGE_CENTRE') AS storage_centres,
+                COUNT(*) FILTER (WHERE ownership = 'GOVERNMENT') AS govt_facilities,
+                COUNT(*) FILTER (WHERE verification_status = 'VERIFIED') AS verified_facilities
+            FROM facilities
+        `);
+
+        // Total blood units across active network
+        const networkUnitsRes = await pool.query(`
+            SELECT 
+                COALESCE(SUM(inv.total_units), 0)::INT AS total_network_units,
+                COALESCE(SUM(inv.available_units), 0)::INT AS available_network_units,
+                COALESCE(SUM(inv.expiring_soon_units), 0)::INT AS expiring_soon_network_units
+            FROM facility_blood_inventory inv
+            JOIN facilities f ON inv.facility_id = f.id
+            WHERE f.is_active = TRUE AND f.operating_status != 'DEBOARDED'
+        `);
+
         // 5. Recent active emergency requests
         const recentEmergencyRes = await pool.query(`
             SELECT r.*, h.hospital_name,
@@ -96,6 +121,10 @@ exports.getDashboardStats = async (req, res) => {
                 matches: matchStatsRes.rows[0],
                 alerts: notifStatsRes.rows[0],
                 hospitals: hospitalsRes.rows[0],
+                facilities: {
+                    ...facilitiesRes.rows[0],
+                    ...networkUnitsRes.rows[0]
+                },
                 recent_emergencies: recentEmergencyRes.rows
             }
         });
@@ -105,9 +134,24 @@ exports.getDashboardStats = async (req, res) => {
     }
 };
 
-// Get map visualization data (hospitals, donors, active match vectors)
+// Get map visualization data (facilities, hospitals, donors, active match vectors)
 exports.getMapData = async (req, res) => {
     try {
+        // Facilities (only active, non-deboarded)
+        const facilitiesRes = await pool.query(`
+            SELECT 
+                f.id, f.facility_code, f.facility_name, f.facility_type, f.ownership,
+                f.verification_status, f.operating_status, f.phone, f.address,
+                f.latitude, f.longitude,
+                COALESCE(SUM(inv.available_units), 0)::INT AS available_units,
+                COALESCE(SUM(inv.total_units), 0)::INT AS total_units
+            FROM facilities f
+            LEFT JOIN facility_blood_inventory inv ON f.id = inv.facility_id
+            WHERE f.latitude IS NOT NULL AND f.longitude IS NOT NULL
+              AND f.is_active = TRUE AND f.operating_status != 'DEBOARDED'
+            GROUP BY f.id
+        `);
+
         // Hospitals
         const hospitalsRes = await pool.query(`
             SELECT h.id, h.hospital_name, h.phone, h.latitude, h.longitude, h.verified,
@@ -153,6 +197,7 @@ exports.getMapData = async (req, res) => {
         res.json({
             success: true,
             data: {
+                facilities: facilitiesRes.rows,
                 hospitals: hospitalsRes.rows,
                 donors: donorsRes.rows,
                 requests: requestsRes.rows,
